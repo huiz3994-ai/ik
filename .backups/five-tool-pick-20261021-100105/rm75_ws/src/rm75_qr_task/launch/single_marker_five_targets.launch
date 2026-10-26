@@ -1,0 +1,29 @@
+<launch>
+  <arg name="execution_authorized" default="false"/>
+  <arg name="trajectory_execution_authorized" default="false"/>
+  <arg name="tool_voltage_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <arg name="publish_handeye_tf" default="false"/>
+  <arg name="marker_config" default="$(find rm75_qr_task)/config/single_marker.yaml"/>
+  <arg name="target_config" default="$(find rm75_qr_task)/config/single_marker_five_targets.yaml"/>
+  <arg name="calibration_file" default="/root/.ros/rm75_qr_task/single_marker_five_targets.yaml"/>
+
+  <include if="$(arg publish_handeye_tf)"
+           file="$(find rm75_qr_task)/launch/publish_handeye_tf.launch"/>
+  <node pkg="rm75_qr_task" type="marker_node.py" name="rm75_qr_marker"
+        output="screen">
+    <param name="markers_config" value="$(arg marker_config)"/>
+  </node>
+  <node pkg="rm75_qr_task" type="five_target_server.py"
+        name="rm75_five_target_server" output="screen">
+    <param name="target_config" value="$(arg target_config)"/>
+    <param name="calibration_file" value="$(arg calibration_file)"/>
+    <param name="execution_authorized" value="$(arg execution_authorized)"/>
+    <param name="trajectory_execution_authorized"
+           value="$(arg trajectory_execution_authorized)"/>
+    <param name="tool_voltage_authorized"
+           value="$(arg tool_voltage_authorized)"/>
+    <param name="supervised_commissioning_authorized"
+           value="$(arg supervised_commissioning_authorized)"/>
+  </node>
+</launch>

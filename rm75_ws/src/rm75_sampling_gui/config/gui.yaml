@@ -1,0 +1,213 @@
+# HMI configuration. Real command dispatch still requires an explicit launch arg.
+window_title: "高原寒区采样机器人现场操作站"
+robot_name: "RM75"
+tool_count: 5
+ros_namespace: "/rm75_sampling_gui"
+ros_node_name: "rm75_sampling_gui"
+log_level: "INFO"
+qr_execution_authorized: false
+trajectory_execution_authorized: false
+joint_control_execution_authorized: false
+supervised_commissioning_authorized: false
+touch_z_force_authorized: false
+tool5_drill_authorized: false
+unified_control_authorized: false
+
+web:
+  # The server is local-only by design. A browser must renew this exclusive
+  # lease over its live WebSocket; the server never extends it by itself.
+  control_session_timeout_s: 0.65
+
+# RM75-6FB digital twin. Geometry, joint origins, axes and limits are loaded
+# from this vendor xacro with link7_type:=Link7_6fb; they are not duplicated
+# in GUI code or this YAML.
+robot_model:
+  xacro_path: null
+
+rendering:
+  enabled: true
+
+# Conservative engineering defaults for pre-commissioning. These numbers are
+# configurable limits, NOT a declaration that the full seven-axis envelope has
+# passed real-hardware safety acceptance.
+joint_control:
+  # These three commissioning gates intentionally keep real joint motion
+  # locked even if both command-line authorization flags are true.
+  execution_path_verified: false
+  gui_loss_watchdog_verified: false
+  collision_scene_verified: false
+  move_group: arm
+  trajectory_action: /rm75_sampling_gui/follow_joint_trajectory
+  state_validity_service: /check_state_validity
+  joint_limit_margin_rad: 0.02
+  feedback_timeout_s: 0.15
+  heartbeat_timeout_s: 0.35
+  goal_tolerance_rad: 0.015
+  # 2026-10-17 real-arm commissioning measured 0.0355 rad transient J7
+  # servo lag on a 10 degree / 1 second quintic move.  This remains four
+  # times tighter than the legacy bridge's 0.20 rad path tolerance; final
+  # target acceptance is still governed by goal_tolerance_rad above.
+  max_tracking_error_rad: 0.05
+  tracking_latency_allowance_s: 0.02
+  settling_tracking_limit_rad: 0.08
+  command_ttl_s: 2.0
+  minimum_duration_s: 1.0
+  trajectory_period_s: 0.05
+  collision_samples: 25
+  service_timeout_s: 2.0
+  action_server_timeout_s: 3.0
+  result_timeout_s: 5.0
+  cancel_timeout_s: 4.0
+  jog_repeat_ms: 180
+
+# Logs are rotated locally and are also shown in the main window.
+log_directory: "~/.ros/rm75_sampling_gui"
+log_max_bytes: 2097152
+log_backup_count: 5
+
+# Existing ROS endpoint timeouts. Command result topics require a message newer
+# than the corresponding publish call; old ACKs are never accepted.
+ack_timeout_s: 5.0
+service_timeout_s: 8.0
+marker_timeout_s: 10.0
+node_start_timeout_s: 12.0
+feedback_timeout_s: 5.0
+feedback_max_age_s: 1.0
+
+# Teleop uses rm75_touch_teleop; force control uses rm75_vertical_press.
+teleop_config: "config/rm75_touch_real_6f.yaml"
+z_force_teleop_config: "config/rm75_touch_z_force_haptic_real.yaml"
+force_control_package: "rm75_vertical_press"
+force_control_config: "config/rm75_vertical_press_real.yaml"
+
+# Existing ROS packages launched from the operation-station UI.  The HMI only
+# owns processes it started and refuses duplicate expected nodes.
+system_launches:
+  base:
+    package: rm75_sampling_gui
+    launch: base_real.launch
+    expected_nodes: [/rm_driver, /robot_state_publisher, /move_group, /trajectory_bridge]
+    expected_nodes_joint_control: [/rm_driver, /robot_state_publisher, /move_group, /joint_control_server]
+    expected_nodes_touch_control: [/rm_driver, /robot_state_publisher, /move_group]
+    expected_nodes_tool5_control: [/rm_driver, /robot_state_publisher, /move_group]
+    expected_services: [/check_state_validity]
+    args:
+      execution_enabled: "${TRAJECTORY_EXECUTION_AUTHORIZED}"
+      joint_control_execution_authorized: "${JOINT_CONTROL_EXECUTION_AUTHORIZED}"
+      touch_z_force_authorized: "${TOUCH_Z_FORCE_AUTHORIZED}"
+      tool5_drill_authorized: "${TOOL5_DRILL_AUTHORIZED}"
+      supervised_commissioning_authorized: "${SUPERVISED_COMMISSIONING_AUTHORIZED}"
+    timeout_s: 20.0
+  camera:
+    package: rm75_sampling_gui
+    launch: d435i_rgb.launch
+    expected_nodes: [/camera/realsense2_camera_manager]
+    expected_image_topics: [/camera/color/image_raw]
+    usb_recovery:
+      device_name: "Intel RealSense D435i"
+      vendor_id: "8086"
+      product_id: "0b3a"
+      # udev may need a moment to recreate the device during path changes.
+      enumerate_timeout_s: 5.0
+      enumerate_poll_s: 0.25
+      off_s: 2.0
+      settle_s: 5.0
+    timeout_s: 25.0
+  qr:
+    package: rm75_qr_task
+    launch: single_marker_five_targets.launch
+    expected_nodes: [/rm75_qr_marker, /rm75_five_target_server]
+    # Detection, calibration and preview only need the robot model/TF stack.
+    # Real pickup is independently gated on trajectory_execution_authorized
+    # and the live /trajectory_bridge command source.
+    requires: [/rm_driver, /move_group]
+    args:
+      execution_authorized: "${QR_EXECUTION_AUTHORIZED}"
+      trajectory_execution_authorized: "${TRAJECTORY_EXECUTION_AUTHORIZED}"
+      tool_voltage_authorized: "${EXECUTION_ENABLED}"
+      supervised_commissioning_authorized: "${SUPERVISED_COMMISSIONING_AUTHORIZED}"
+      tool_config: "${TOOLS_CONFIG}"
+      # The D435i driver publishes camera_link as a separate TF root.  Join it
+      # to Link7 with the existing physically verified hand-eye calibration so
+      # marker poses can be transformed into base_link.
+      publish_handeye_tf: "true"
+    timeout_s: 15.0
+  # Saved base_link poses do not use RGB frames or marker detection.  Run only
+  # the motion service so autonomous point pickup remains camera-independent.
+  pose:
+    package: rm75_qr_task
+    launch: configured_pickup.launch
+    expected_nodes: [/rm75_five_target_server]
+    requires: [/rm_driver, /move_group]
+    args:
+      execution_authorized: "${EXECUTION_ENABLED}"
+      trajectory_execution_authorized: "${TRAJECTORY_EXECUTION_AUTHORIZED}"
+      tool_voltage_authorized: "${EXECUTION_ENABLED}"
+      supervised_commissioning_authorized: "${SUPERVISED_COMMISSIONING_AUTHORIZED}"
+      tool_config: "${TOOLS_CONFIG}"
+    timeout_s: 15.0
+
+monitoring:
+  refresh_ms: 100
+  plot_samples: 600
+  graph_poll_s: 2.0
+  graph_max_age_s: 6.0
+  base_frame: base_link
+  tip_frame: Link7
+  wrench_topic: /rm_driver/UdpSixZeroForce
+  image_topic: /qr_task/debug_image
+  image_max_pixels: 4096000
+  nodes:
+    driver: /rm_driver
+    touch: /Geomagic/Geomagic
+    teleop_control: /rm75_touch_teleop
+    force_control: /rm75_vertical_press
+    joint_control: /joint_control_server
+    qr: /rm75_five_target_server
+    marker: /rm75_qr_marker
+
+experiment:
+  directory: experiments  # relative to this package, never the shell cwd
+  queue_size: 2048
+
+# Optional operator metadata only. No sampling timer or motion is implemented.
+sampling:
+  duration_s: null
+
+# Tool5 relative-depth drilling remains locked until explicitly launched via
+# the dedicated authorization path.  These are conservative pre-commissioning
+# limits, not evidence of a validated rotating-soil force loop.
+tool5_drill:
+  desired_force_n: -10.0
+  max_axial_force_n: 60.0
+  max_torque_nm: 15.0
+  max_z_velocity_m_s: 0.005
+  max_feed_travel_m: 0.05
+  motor_speed_rad_s: 0.5
+  motor_watchdog_timeout_s: 1.0
+  tcp_calibrated: false
+  tool5_tip_offset_m: null
+
+# The real-time launcher stages the reviewed delivery files under rm75_ws so
+# the existing Docker container can use them without opening arbitrary paths.
+sampling_hardware:
+  rs485_port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
+  modbus_path: /root/rm75_ws/.rm75_hardware/modbus.py
+  poll_hz: 1.0
+  motor_port: /dev/serial/by-id/usb-HDSC_CDC_Device_00000000050C-if00
+  motor_script: /root/rm75_ws/.rm75_hardware/motor_control.py
+  # Mirrored by backend and enforced authoritatively in motor_control.py.
+  motor_control_mode: VEL
+  motor_max_speed_rad_s: 1.0
+  motor_max_current_a: 4.0
+  motor_max_torque_nm: 15.0
+
+# Source keys are read from the existing YAMLs without writing them.
+parameter_fields:
+  - {label: "遥操作 scale", source: teleop, key: position_scale, unit: ratio}
+  - {label: "力控 target_force", source: force, key: desired_force, unit: N}
+  - {label: "力控 max_force", source: force, key: force_limit, unit: N}
+  - {label: "采样速度上限", source: force, key: max_z_velocity, unit: m/s}
+  - {label: "采样时间", source: gui, key: sampling.duration_s, unit: s}
+  - {label: "力反馈 timeout", source: force, key: force_feedback_timeout, unit: s}
+  - {label: "ACK timeout", source: gui, key: ack_timeout_s, unit: s}

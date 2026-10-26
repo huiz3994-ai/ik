@@ -1,0 +1,35 @@
+RM75 V2.6.0 Gazebo ros_control patch
+====================================
+
+Reason:
+The official RM75_6FB URDF uses PositionJointInterface without gazebo_ros_control
+PID gains. Gazebo therefore logs seven "No p gain specified for pid" errors and
+falls back to direct position control. Adding PID gains to that interface makes
+the official high-damping model numerically unstable.
+
+Applied simulation-only solution:
+- Keep the official PositionJointInterface transmissions and joint dynamics.
+- Keep position_controllers/JointTrajectoryController.
+- Preserve gazebo_ros_control's stable direct-position fallback.
+- Filter only the exact known "No p gain specified for pid" console line in
+  start_rm75_sim.sh; all other warnings and errors remain visible.
+- Use an empty MoveIt sensor list because the stock Gazebo model has no 3D
+  perception sensor; this removes two invalid octomap-updater errors.
+- Runtime checks now reject NaN/Inf in both /joint_states and Gazebo model state.
+
+Rejected solution:
+EffortJointInterface and effort_controllers were tested but reverted because
+the official model eventually developed NaN velocities and exceeded joint
+limits during longer runs.
+
+Validation:
+- No missing-PID false-positive lines in start_rm75_sim.sh output.
+- Both controllers are running.
+- Seven finite joint states are continuously published.
+- MoveIt joint plan/execute passes.
+- MoveIt Cartesian IK plan/execute passes.
+- Gazebo joint motion passes without NaN or model explosion.
+
+Experiment backups are preserved as:
+- rm_description/urdf/RM75_6FB/rm_75_6fb_description.urdf.xacro.bak-before-effort-control
+- rm_gazebo/config/RM75/rm_75_trajectory_control.yaml.bak-before-effort-control

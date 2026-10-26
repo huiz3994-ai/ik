@@ -1,0 +1,58 @@
+<launch>
+  <!-- One launch for Gazebo GUI + RM75 + MoveIt backend + Geomagic Touch.
+       RViz is intentionally not started. -->
+  <arg name="paused" default="false"/>
+  <arg name="gazebo_gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <arg name="initialize_forward_pose" default="true"/>
+  <arg name="device_name" default="Default Device"/>
+  <arg name="config" default="$(find rm75_touch_teleop)/config/rm75_touch.yaml"/>
+  <arg name="haptic_feedback" default="false"/>
+
+  <include file="$(find rm_gazebo)/launch/RM75/arm_world.launch">
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="true"/>
+    <!-- The stock root-owned gzclient cannot authenticate to the host X server.
+         Start only gzserver here; a UID-matched GUI node is declared below. -->
+    <arg name="gui" value="false"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="debug" value="$(arg debug)"/>
+    <arg name="link7_type" value="Link7"/>
+  </include>
+
+  <node if="$(arg gazebo_gui)" name="gazebo_gui" pkg="rm75_touch_teleop"
+        type="gzclient_as_desktop_user.sh" args="--verbose"
+        output="screen" required="true"/>
+
+  <include file="$(find rm_gazebo)/launch/RM75/arm_gazebo_states.launch"/>
+  <include file="$(find rm_gazebo)/launch/RM75/arm_75_trajectory_controller.launch"/>
+
+  <!-- Start MoveIt without including moveit_rviz.launch. -->
+  <include file="$(find rm_75_moveit_config)/launch/move_group.launch">
+    <arg name="publish_monitored_planning_scene" value="true"/>
+    <arg name="link7_type" value="Link7"/>
+  </include>
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher"
+        type="joint_state_publisher" output="screen">
+    <param name="/use_gui" value="false"/>
+    <rosparam param="/source_list">[/arm/joint_states]</rosparam>
+  </node>
+
+  <include file="$(find rm75_touch_teleop)/launch/teleop.launch">
+    <arg name="start_touch_driver" value="$(arg start_touch_driver)"/>
+    <arg name="start_touch_helpers" value="$(arg start_touch_helpers)"/>
+    <arg name="device_name" value="$(arg device_name)"/>
+    <arg name="config" value="$(arg config)"/>
+    <arg name="haptic_feedback" value="$(arg haptic_feedback)"/>
+  </include>
+
+  <node if="$(arg initialize_forward_pose)" pkg="rm75_touch_examples"
+        type="rm75_initialize_forward_pose" name="rm75_initialize_forward_pose"
+        output="screen" required="false">
+    <param name="move_duration" value="3.0"/>
+  </node>
+</launch>

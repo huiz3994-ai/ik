@@ -1,0 +1,36 @@
+<launch>
+  <!-- Phase 3 uses base_link -> Link7 only. No TCP/tool-frame transform. -->
+  <arg name="execute" default="false"/>
+  <arg name="dx" default="0.0"/>
+  <arg name="dy" default="0.0"/>
+  <arg name="dz" default="0.0"/>
+  <arg name="droll" default="0.0"/>
+  <arg name="dpitch" default="0.0"/>
+  <arg name="dyaw" default="0.0"/>
+  <arg name="link7_speed_mps" default="0.02"/>
+  <!-- Stage 4 evidence is opt-in. When raw_output_csv is non-empty, all four
+       metadata fields and run_summary_json are required by the node. -->
+  <arg name="raw_output_csv" default=""/>
+  <arg name="run_summary_json" default=""/>
+  <arg name="run_id" default=""/>
+  <arg name="scenario" default=""/>
+  <arg name="repetition" default="0"/>
+  <node pkg="rm75_motion_planning" type="rm75_cartesian_commissioning"
+        name="rm75_cartesian_commissioning" output="screen">
+    <rosparam command="load"
+              file="$(find rm75_motion_planning)/config/runtime_guard.yaml"/>
+    <param name="execute" value="$(arg execute)"/>
+    <param name="dx" value="$(arg dx)"/>
+    <param name="dy" value="$(arg dy)"/>
+    <param name="dz" value="$(arg dz)"/>
+    <param name="droll" value="$(arg droll)"/>
+    <param name="dpitch" value="$(arg dpitch)"/>
+    <param name="dyaw" value="$(arg dyaw)"/>
+    <param name="link7_speed_mps" value="$(arg link7_speed_mps)"/>
+    <param name="raw_output_csv" value="$(arg raw_output_csv)"/>
+    <param name="run_summary_json" value="$(arg run_summary_json)"/>
+    <param name="run_id" value="$(arg run_id)"/>
+    <param name="scenario" value="$(arg scenario)"/>
+    <param name="repetition" value="$(arg repetition)"/>
+  </node>
+</launch>

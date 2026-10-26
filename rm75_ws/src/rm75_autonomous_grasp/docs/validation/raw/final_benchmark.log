@@ -1,0 +1,78 @@
+[33m[WARN] [1790925704.838094918, 19.215000000]: Fail: ABORTED: No motion plan found. No execution attempted.[0m
+{
+  "straight_path_blocked": true,
+  "valid_start_and_goal": true,
+  "start": [
+    7.701776263147053e-05,
+    0.3000162609307928,
+    5.465798604742389e-05,
+    0.8999392563537576,
+    5.675403953198099e-05,
+    1.9399826381711698,
+    7.178598808099679e-05
+  ],
+  "goal": [
+    0.8000770177626315,
+    0.3000162609307928,
+    5.465798604742389e-05,
+    0.8999392563537576,
+    5.675403953198099e-05,
+    1.9399826381711698,
+    7.178598808099679e-05
+  ],
+  "results": [
+    {
+      "planner": "RRTConnect",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.058776246,
+      "wall_seconds": 0.07120784200003527,
+      "joint_path_length_rad": 0.9808705787521474,
+      "waypoints": 83,
+      "error_code": 1
+    },
+    {
+      "planner": "RRTstar",
+      "success": false,
+      "validated_collision_free": false,
+      "planning_seconds": null,
+      "wall_seconds": 5.008133853000004,
+      "joint_path_length_rad": 0,
+      "waypoints": 0,
+      "error_code": -1
+    },
+    {
+      "planner": "PRM",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.309903437,
+      "wall_seconds": 0.35103039900002386,
+      "joint_path_length_rad": 5.487265848672907,
+      "waypoints": 519,
+      "error_code": 1
+    },
+    {
+      "planner": "KPIECE",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.197267156,
+      "wall_seconds": 0.21160543799999232,
+      "joint_path_length_rad": 1.0237010721458708,
+      "waypoints": 93,
+      "error_code": 1
+    },
+    {
+      "planner": "EST",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.072483797,
+      "wall_seconds": 0.08814062000004697,
+      "joint_path_length_rad": 1.0408154350667942,
+      "waypoints": 94,
+      "error_code": 1
+    }
+  ]
+}
+[0m[INFO] [1790925695.476125373]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1790925695.478539974]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[0m[INFO] [1790925696.962668246, 11.487000000]: Ready to take commands for planning group arm.[0m

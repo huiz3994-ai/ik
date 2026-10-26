@@ -1,0 +1,22 @@
+# Detection-only configuration for the common rack marker.  The encoded black
+# square is the PnP size; the 30 mm printed outer border is not used.
+marker_type: apriltag16h5
+base_frame: base_link
+image_topic: /camera/color/image_raw
+camera_info_topic: /camera/color/camera_info
+stability_samples: 5
+max_age_s: 0.5
+max_translation_jump_m: 0.006
+max_rotation_jump_deg: 2.0
+max_reprojection_error_px: 2.0
+
+slots:
+  - id: 0
+    marker_id: 0
+    text: RM75_COMMON_RACK_MARKER
+    name: COMMON_RACK_MARKER
+    enabled: true
+    calibrated: true
+    # Candidate value from the supplied drawing.  Re-measure the encoded
+    # black square and set marker_size_measurement_verified in the target config.
+    size_m: 0.0225

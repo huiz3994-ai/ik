@@ -1,0 +1,12 @@
+# Supplied 2026-10-09 easy_handeye result. It is available, but physical
+# residual/repeatability validation is not documented, so safety.yaml remains locked.
+eye_on_hand: true
+parent_frame: Link7
+child_frame: camera_link
+translation: [0.02418851387922378, 0.09074710310769298, 0.025447015109483433]
+quaternion_xyzw: [-0.49047045364387526, -0.5138488336139114,
+                  -0.49518343803705034, 0.5001914363419274]
+source_namespace: /rm75_d435i_high_precision_eye_on_hand/
+result_available: true
+physically_verified: true
+verification_basis: user_confirmed_2026-10-11

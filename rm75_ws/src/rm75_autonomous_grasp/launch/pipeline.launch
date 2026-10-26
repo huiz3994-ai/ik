@@ -1,0 +1,7 @@
+<launch>
+ <arg name="simulation" default="true"/><arg name="execute" default="false"/><arg name="task_config" default="$(find rm75_autonomous_grasp)/config/task.yaml"/>
+ <arg name="detector" default="color"/>
+ <include file="$(find rm75_vision_grasp)/launch/vision.launch"><arg name="detector" value="$(arg detector)"/></include>
+ <node name="obstacle_map" pkg="rm75_autonomous_grasp" type="obstacle_map" output="screen"/>
+ <node name="grasp_state_machine" pkg="rm75_autonomous_grasp" type="grasp_node" output="screen"><rosparam command="load" file="$(arg task_config)"/><param name="simulation" value="$(arg simulation)"/><param name="execute" value="$(arg execute)"/></node>
+</launch>

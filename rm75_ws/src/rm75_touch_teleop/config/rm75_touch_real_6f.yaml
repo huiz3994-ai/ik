@@ -1,0 +1,37 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+# Match the working Unitree Z1 mapping:
+# RM75 dx=-Touch dz, dy=-Touch dx, dz=Touch dy.
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+use_touch_increment: true
+metres_per_touch_unit: 0.001
+
+# RealMan CAN-FD joint streaming interface.
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+
+# Faster teleoperation defaults; force and displacement safety gates remain active.
+position_scale: 0.8
+orientation_enabled: true
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.08
+max_joint_velocity: 0.40
+
+# RM75 six-axis force version: use compensated external wrench feedback.
+force_safety_enabled: true
+require_force_feedback: true
+force_topic: /rm_driver/UdpSixZeroForce
+force_feedback_timeout: 0.25
+max_external_force: 35.0
+max_external_torque: 5.0
+
+# Six-axis safety monitoring does not implicitly enable Touch force output.
+haptic_feedback_enabled: false

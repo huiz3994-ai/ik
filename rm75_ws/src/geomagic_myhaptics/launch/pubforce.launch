@@ -1,0 +1,207 @@
+<!-- <launch>
+
+    <include file="$(find geomagic_control)/launch/geomagic_headless.launch" />
+    <node pkg="geomagic_myhaptics" type="pubforce" name="pubforce" output="screen" />
+
+</launch> -->
+<launch>
+  <!-- ================================
+       基本参数
+       ================================ -->
+  <!-- Geomagic Touch driver namespace / prefix -->
+  <arg name="prefix" default="Geomagic"/>
+  <arg name="device_name" default="Default Device"/>
+
+  <!-- 是否启动 Touch 驱动（若你已在别处启动 geomagic_headless.launch，可设为 false） -->
+  <arg name="start_driver" default="true"/>
+
+  <!-- 是否启动力反馈发布（pubforce） -->
+  <arg name="start_pubforce" default="true"/>
+
+  <!-- ================================
+       可视化总开关（你要的新增开关）
+       ================================ -->
+  <!-- 一键控制：workspace_visualizer + RViz + axes_ticks -->
+  <arg name="enable_visualization" default="true"/>
+
+  <!-- 可视化细分开关（在 enable_visualization=true 时才生效） -->
+  <arg name="start_workspace_visualizer" default="true"/>
+  <arg name="rviz" default="false"/>
+  <arg name="start_axes_ticks" default="true"/>
+
+  <!-- 是否写入全局 /robot_description（供 RViz RobotModel 用）
+       如果你系统里已有 /robot_description 且不想覆盖，可设 false -->
+  <arg name="set_robot_description" default="false"/>
+
+  <!-- ================================
+       workspace_visualizer 参数（你原来的保留）
+       ================================ -->
+
+  <!-- Input mode for workspace sampling: tf (recommended) | pose | fk_random -->
+  <arg name="input_mode" default="tf"/>
+
+  <!-- TF mode params -->
+  <arg name="tf_parent" default="base"/>
+  <arg name="tf_child" default="stylus"/>
+
+  <!-- Pose mode params -->
+  <arg name="pose_topic" default="/$(arg prefix)/pose"/>
+  <arg name="scale" default="0.001"/>
+  <arg name="frame_id" default=""/>
+
+  <!-- Sampling controls (tf/pose only) -->
+  <arg name="record_when_button_pressed" default="true"/>
+  <arg name="record_button" default="either"/> <!-- grey|white|either -->
+
+  <!-- Sampling mode (tf/pose only): fixed | random_time | distance -->
+  <arg name="sampling_mode" default="fixed"/>
+  <arg name="sample_rate_hz" default="500"/>
+  <arg name="sample_tick_hz" default="1000"/>
+  <arg name="min_sample_dt" default="0.0"/>
+  <arg name="min_sample_dist" default="0.0"/>
+  <arg name="random_dt_min" default="0.005"/>
+  <arg name="random_dt_max" default="0.020"/>
+
+  <!-- Downsampling / capacity -->
+  <arg name="downsample_resolution" default="0.002"/>
+  <arg name="max_points" default="20000"/>
+
+  <!-- Visualization toggles (node-level; RViz 也可单独勾选显示项) -->
+  <arg name="show_text" default="true"/>
+  <arg name="text_to_console" default="false"/>
+  <arg name="show_bbox" default="true"/>
+
+  <!-- Boundary reconstruction: none|hull|voxel -->
+  <arg name="reconstruct_mode" default="none"/>
+  <arg name="voxel_size" default="0.005"/>
+
+  <!-- Point colors: colorize by z axis -->
+  <arg name="colorize_by_z" default="true"/>
+  <arg name="z_color_min" default=""/>
+  <arg name="z_color_max" default=""/>
+
+  <!-- fk_random (offline) sampling params -->
+  <arg name="fk_base" default="base"/>
+  <arg name="fk_tip" default="stylus"/>
+  <arg name="fk_samples" default="50000"/>
+  <arg name="fk_seed" default="-1"/>
+  <arg name="fk_unique" default="true"/>
+
+  <!-- Optional compatibility: publish combined MarkerArray on /geomagic_workspace/markers -->
+  <arg name="publish_combined" default="false"/>
+
+
+  <!-- ================================
+       1) Touch 驱动（geomagic_headless）
+       ================================ -->
+  <group if="$(arg start_driver)">
+    <include file="$(find geomagic_control)/launch/geomagic_headless.launch">
+      <arg name="device_name" value="$(arg device_name)"/>
+      <arg name="prefix" value="$(arg prefix)"/>
+    </include>
+  </group>
+
+  <!-- ================================
+       2) 力反馈发布（pubforce）
+       ================================ -->
+  <node if="$(arg start_pubforce)"
+        pkg="geomagic_myhaptics"
+        type="pubforce"
+        name="pubforce"
+        output="screen" />
+
+  <!-- ================================
+       3) 可视化总开关控制区域
+       ================================ -->
+  <group if="$(arg enable_visualization)">
+
+    <!-- 给 RViz RobotModel 提供 /robot_description（可选覆盖） -->
+    <group if="$(arg set_robot_description)">
+      <param name="robot_description" command="cat $(find geomagic_description)/urdf/geomagic.urdf" />
+    </group>
+
+    <!-- 3.1 Workspace visualizer -->
+    <node if="$(arg start_workspace_visualizer)"
+          name="geomagic_workspace_visualizer"
+          pkg="geomagic_control"
+          type="workspace_visualizer.py"
+          output="screen">
+
+      <param name="input_mode" value="$(arg input_mode)"/>
+
+      <!-- TF mode -->
+      <param name="tf_parent" value="$(arg tf_parent)"/>
+      <param name="tf_child" value="$(arg tf_child)"/>
+
+      <!-- Pose mode -->
+      <param name="pose_topic" value="$(arg pose_topic)"/>
+      <param name="scale" value="$(arg scale)"/>
+      <param name="frame_id" value="$(arg frame_id)"/>
+
+      <!-- Buttons -->
+      <param name="button_topic" value="/$(arg prefix)/button"/>
+
+      <!-- Sampling (tf/pose) -->
+      <param name="record_when_button_pressed" value="$(arg record_when_button_pressed)"/>
+      <param name="record_button" value="$(arg record_button)"/>
+
+      <param name="sampling_mode" value="$(arg sampling_mode)"/>
+      <param name="sample_rate_hz" value="$(arg sample_rate_hz)"/>
+      <param name="sample_tick_hz" value="$(arg sample_tick_hz)"/>
+      <param name="min_sample_dt" value="$(arg min_sample_dt)"/>
+      <param name="min_sample_dist" value="$(arg min_sample_dist)"/>
+      <param name="random_dt_min" value="$(arg random_dt_min)"/>
+      <param name="random_dt_max" value="$(arg random_dt_max)"/>
+
+      <param name="downsample_resolution" value="$(arg downsample_resolution)"/>
+      <param name="max_points" value="$(arg max_points)"/>
+
+      <!-- Visualization -->
+      <param name="publish_text" value="$(arg show_text)"/>
+      <param name="text_to_console" value="$(arg text_to_console)"/>
+      <param name="publish_bbox" value="$(arg show_bbox)"/>
+
+      <!-- Reconstruction -->
+      <param name="reconstruct_mode" value="$(arg reconstruct_mode)"/>
+      <param name="voxel_size" value="$(arg voxel_size)"/>
+
+      <!-- Point color -->
+      <param name="colorize_by_z" value="$(arg colorize_by_z)"/>
+      <param if="$(eval arg('z_color_min') != '')" name="z_color_min" value="$(arg z_color_min)"/>
+      <param if="$(eval arg('z_color_max') != '')" name="z_color_max" value="$(arg z_color_max)"/>
+
+      <!-- fk_random -->
+      <param name="robot_description_param" value="robot_description"/>
+      <param name="fk_base" value="$(arg fk_base)"/>
+      <param name="fk_tip" value="$(arg fk_tip)"/>
+      <param name="fk_samples" value="$(arg fk_samples)"/>
+      <param name="fk_seed" value="$(arg fk_seed)"/>
+      <param name="fk_unique" value="$(arg fk_unique)"/>
+
+      <!-- Topics / compatibility -->
+      <param name="publish_combined" value="$(arg publish_combined)"/>
+    </node>
+
+    <!-- 3.2 RViz -->
+    <node if="$(arg rviz)"
+          name="rviz"
+          pkg="rviz"
+          type="rviz"
+          args="-d $(find geomagic_control)/rviz/geomagic_workspace_viz.rviz"
+          required="true"/>
+
+    <!-- 3.3 坐标轴刻度（你的 workspace_viz 包） -->
+    <node if="$(arg start_axes_ticks)"
+          pkg="workspace_viz"
+          type="axes_ticks_publisher.py"
+          name="axes_ticks_publisher"
+          output="screen">
+      <param name="frame" value="base"/>
+      <rosparam param="axis_bounds">
+        [[-1.0, 1.0], [-1.0, 1.0], [0.0, 2.0]]
+      </rosparam>
+    </node>
+
+  </group>
+
+</launch>

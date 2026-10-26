@@ -1,0 +1,24 @@
+Repository:
+https://github.com/RealManRobot/rm_robot.git
+
+Requested version:
+V2.6.0
+
+Checked out tag:
+V2.6.0
+
+Commit:
+3d7063025786c4c5ed2db2ebc09f68d89d589539
+
+ROS:
+Noetic
+
+Robot:
+RM75
+
+Docker:
+rm75_noetic
+
+Base image:
+ros-noetic-rm75-base:v1
+

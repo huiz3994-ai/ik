@@ -1,0 +1,6 @@
+<launch>
+
+    <include file="$(find geomagic_control)/launch/geomagic_duel_headless_p1.launch" />
+    <node pkg="geomagic_myhaptics" type="pubforce_touch1" name="pubforce_touch1" output="screen" />
+    <node pkg="z1_examples" type="gripper_ctrl_mycode" name="gripper_ctrl_mycode" output="screen" />
+</launch>

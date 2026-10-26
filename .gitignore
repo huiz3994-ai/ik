@@ -1,0 +1,28 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv*/
+venv/
+
+# Node dependencies and frontend build output
+node_modules/
+dist/
+
+# ROS/catkin generated files
+rm75_ws/build/
+rm75_ws/devel/
+rm75_ws/install/
+rm75_ws/logs/
+
+# Local recovery and runtime state
+rm75_ws/.recovery/
+rm75_ws/.rm75_hardware/
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+
+# Preserve embedded source as ordinary files, not nested Git metadata
+**/.git.nested-local/

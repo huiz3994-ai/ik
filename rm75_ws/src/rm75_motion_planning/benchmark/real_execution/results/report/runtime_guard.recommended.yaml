@@ -1,0 +1,11 @@
+# Generated from supervised real-robot data. Do not deploy unless status=eligible.
+calibration_status: provisional_do_not_deploy
+normal_pass_runs: 14
+normal_coverage_complete: false
+max_tracking_error_warning_rad: 0.0190579383733
+max_tracking_error_stop_rad: 0.0310564551594
+feedback_timeout_stop_sec: 0.0421185255051
+force_warning_n: 2.54382532707
+force_stop_n: 3.88734984398
+torque_warning_nm: 0.13489397455
+torque_stop_nm: 0.201167844236

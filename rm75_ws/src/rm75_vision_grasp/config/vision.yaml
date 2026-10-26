@@ -1,0 +1,7 @@
+detector: color
+# color | apriltag (36h11); YOLO requires ObjectDetector implementation.
+tag_id: 0
+base_frame: base_link
+camera_frame: camera_link
+world_frame: world
+max_age: 0.5

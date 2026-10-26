@@ -1,0 +1,74 @@
+{
+  "straight_path_blocked": true,
+  "valid_start_and_goal": true,
+  "start": [
+    9.115844012441698e-05,
+    0.2999428890512137,
+    4.6857565970448434e-05,
+    0.9000004234498364,
+    -9.994528082035714e-05,
+    1.9399867598713563,
+    -7.222429005793174e-05
+  ],
+  "goal": [
+    0.8000911584401245,
+    0.2999428890512137,
+    4.6857565970448434e-05,
+    0.9000004234498364,
+    -9.994528082035714e-05,
+    1.9399867598713563,
+    -7.222429005793174e-05
+  ],
+  "results": [
+    {
+      "planner": "RRTConnect",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.036243442,
+      "wall_seconds": 0.05552796299991769,
+      "joint_path_length_rad": 3.497459511387923,
+      "waypoints": 36,
+      "error_code": 1
+    },
+    {
+      "planner": "RRTstar",
+      "success": false,
+      "validated_collision_free": false,
+      "planning_seconds": null,
+      "wall_seconds": 3.0235990520000087,
+      "joint_path_length_rad": 0,
+      "waypoints": 0,
+      "error_code": -1
+    },
+    {
+      "planner": "PRM",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.033071375,
+      "wall_seconds": 0.042507903000000624,
+      "joint_path_length_rad": 3.077875967209869,
+      "waypoints": 31,
+      "error_code": 1
+    },
+    {
+      "planner": "KPIECE",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.17223575,
+      "wall_seconds": 0.18901857999992444,
+      "joint_path_length_rad": 1.9732251954049145,
+      "waypoints": 19,
+      "error_code": 1
+    },
+    {
+      "planner": "EST",
+      "success": true,
+      "validated_collision_free": true,
+      "planning_seconds": 0.07401106,
+      "wall_seconds": 0.08238066799992794,
+      "joint_path_length_rad": 4.895575069810791,
+      "waypoints": 49,
+      "error_code": 1
+    }
+  ]
+}

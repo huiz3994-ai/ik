@@ -1,0 +1,25 @@
+{
+  "mode": "obstacle",
+  "injected": true,
+  "task_success": false,
+  "error": "PLAN_FAIL",
+  "cancel_latency_wall_s": 0.8125929440000164,
+  "states": [
+    "IDLE: ",
+    "WAIT_OBJECT: ",
+    "VISION_DETECT: ",
+    "POSE_ESTIMATION: ",
+    "UPDATE_OBSTACLE_MAP: ",
+    "PLAN_PATH: select feasible pregrasp",
+    "EXECUTE_TRAJECTORY: pregrasp",
+    "PLAN_PATH: ",
+    "EXECUTE_TRAJECTORY: ",
+    "COLLISION: COLLISION: <octomap> / left_finger",
+    "PLAN_PATH: Replan from measured stopped state",
+    "PLAN_PATH: Replan from measured stopped state",
+    "PLAN_PATH: Replan from measured stopped state",
+    "PLAN_FAIL: PLAN_FAIL"
+  ],
+  "execute_calls": 2,
+  "obstacle_source": "Gazebo RGB-D only; no CollisionObject insertion"
+}

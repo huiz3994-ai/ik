@@ -1,0 +1,56 @@
+_______________________________________________________________________________
+Warnings << rm75_autonomous_grasp:make /root/rm75_ws/logs/rm75_autonomous_grasp/build.make.010.log
+[31m[ERROR] [1790925781.179475711]: Robot semantic description not found. Did you forget to define or remap '/robot_description_semantic'?[0m
+cd /root/rm75_ws/build/rm75_autonomous_grasp; catkin build --get-env rm75_autonomous_grasp | catkin env -si  /usr/bin/make run_tests --jobserver-auth=3,4; cd -
+
+...............................................................................
+-------------------------------------------------------
+Profile:                     default
+Extending:        [explicit] /opt/ros/noetic
+Workspace:                   /root/rm75_ws
+-------------------------------------------------------
+Build Space:        [exists] /root/rm75_ws/build
+Devel Space:        [exists] /root/rm75_ws/devel
+Install Space:      [unused] /root/rm75_ws/install
+Log Space:          [exists] /root/rm75_ws/logs
+Source Space:       [exists] /root/rm75_ws/src
+DESTDIR:            [unused] None
+-------------------------------------------------------
+Devel Space Layout:          linked
+Install Space Layout:        None
+-------------------------------------------------------
+Additional CMake Args:       -DCMAKE_BUILD_TYPE=Release
+Additional Make Args:        run_tests -j 2
+Additional catkin Make Args: None
+Internal Make Job Server:    True
+Cache Job Environments:      False
+-------------------------------------------------------
+Buildlisted Packages:        None
+Skiplisted Packages:         None
+-------------------------------------------------------
+Workspace configuration appears valid.
+-------------------------------------------------------
+[build] Found 28 packages in 0.0 seconds.                                      
+[build] Package table is up to date.                                           
+Starting >>> rm75_vision_grasp                    
+Starting >>> rm_75_moveit_config                  
+Finished <<< rm_75_moveit_config                   [ 0.2 seconds ]
+Starting >>> rm_description                       
+Finished <<< rm_description                        [ 0.2 seconds ]
+Starting >>> rm_75_6f_moveit_config               
+Finished <<< rm_75_6f_moveit_config                [ 0.2 seconds ]
+Starting >>> rm_gazebo                            
+Finished <<< rm_gazebo                             [ 0.2 seconds ]
+Starting >>> rm_msgs                              
+Finished <<< rm_msgs                               [ 0.2 seconds ]
+Starting >>> rm_driver                            
+Finished <<< rm_driver                             [ 0.2 seconds ]
+Finished <<< rm75_vision_grasp                     [ 2.9 seconds ]
+Starting >>> rm75_autonomous_grasp                
+Finished <<< rm75_autonomous_grasp                 [ 18.2 seconds ]
+[build] Summary: All 8 packages succeeded!
+[build] Ignored: 20 packages were skipped or are skiplisted.
+[build] Warnings: 1 packages succeeded with warnings.
+[build] Abandoned: No packages were abandoned.
+[build] Failed: No packages failed.
+[build] Runtime: 21.2 seconds total.

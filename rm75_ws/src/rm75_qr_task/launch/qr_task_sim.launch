@@ -1,0 +1,22 @@
+<launch>
+  <!-- Logic-only safe entry: no rm_driver voltage publisher and no robot execution. -->
+  <arg name="start_marker" default="false"/>
+  <arg name="markers_config" default="$(find rm75_qr_task)/config/markers.yaml"/>
+  <arg name="task_config" default="$(find rm75_qr_task)/config/task.yaml"/>
+  <arg name="safety_config" default="$(find rm75_qr_task)/config/safety.yaml"/>
+  <arg name="state_file" default="/tmp/rm75_qr_task_sim_state.json"/>
+  <node if="$(arg start_marker)" pkg="rm75_qr_task" type="marker_node.py"
+        name="rm75_qr_marker" output="screen">
+    <param name="markers_config" value="$(arg markers_config)"/>
+  </node>
+  <node pkg="rm75_qr_task" type="task_server.py" name="rm75_qr_task_server"
+        output="screen">
+    <param name="markers_config" value="$(arg markers_config)"/>
+    <param name="task_config" value="$(arg task_config)"/>
+    <param name="safety_config" value="$(arg safety_config)"/>
+    <param name="state_file" value="$(arg state_file)"/>
+    <param name="execution_authorized" value="false"/>
+    <param name="simulation" value="true"/>
+    <param name="use_mock_adapters" value="true"/>
+  </node>
+</launch>

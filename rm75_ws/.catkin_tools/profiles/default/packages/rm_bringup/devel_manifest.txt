@@ -1,0 +1,4 @@
+rm_robot/rm_bringup
+/root/rm75_ws/devel/.private/rm_bringup/lib/pkgconfig/rm_bringup.pc /root/rm75_ws/devel/lib/pkgconfig/rm_bringup.pc
+/root/rm75_ws/devel/.private/rm_bringup/share/rm_bringup/cmake/rm_bringupConfig.cmake /root/rm75_ws/devel/share/rm_bringup/cmake/rm_bringupConfig.cmake
+/root/rm75_ws/devel/.private/rm_bringup/share/rm_bringup/cmake/rm_bringupConfig-version.cmake /root/rm75_ws/devel/share/rm_bringup/cmake/rm_bringupConfig-version.cmake

@@ -1,0 +1,9 @@
+rm75_kinematics_optimization
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/lib/librm75_kinematics.so /root/rm75_ws/devel/lib/librm75_kinematics.so
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/lib/rm75_kinematics_optimization/rm75_ik_benchmark /root/rm75_ws/devel/lib/rm75_kinematics_optimization/rm75_ik_benchmark
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/lib/rm75_kinematics_optimization/rm75_fk_cli /root/rm75_ws/devel/lib/rm75_kinematics_optimization/rm75_fk_cli
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/lib/rm75_kinematics_optimization/rm75_kinematics_test /root/rm75_ws/devel/lib/rm75_kinematics_optimization/rm75_kinematics_test
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/lib/pkgconfig/rm75_kinematics_optimization.pc /root/rm75_ws/devel/lib/pkgconfig/rm75_kinematics_optimization.pc
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/share/rm75_kinematics_optimization/config/rm75_6fb.generated.urdf /root/rm75_ws/devel/share/rm75_kinematics_optimization/config/rm75_6fb.generated.urdf
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/share/rm75_kinematics_optimization/cmake/rm75_kinematics_optimizationConfig-version.cmake /root/rm75_ws/devel/share/rm75_kinematics_optimization/cmake/rm75_kinematics_optimizationConfig-version.cmake
+/root/rm75_ws/devel/.private/rm75_kinematics_optimization/share/rm75_kinematics_optimization/cmake/rm75_kinematics_optimizationConfig.cmake /root/rm75_ws/devel/share/rm75_kinematics_optimization/cmake/rm75_kinematics_optimizationConfig.cmake

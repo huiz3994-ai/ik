@@ -1,0 +1,164 @@
+<launch>
+  <!-- 注意：
+  （1）💫核心脚本需要launch前赋权：
+  chmod +x geomagic_control/scripts/workspace_visualizer.py 
+  （2）清空采样点需要在控制台运行：
+  rosservice call /geomagic_workspace_visualizer/reset
+  （3）程序自动采样20000点：
+  roslaunch geomagic_control geomagic_workspace_viz.launch \
+  input_mode:=fk_random \
+  fk_samples:=20000 \
+  max_points:=20000 \
+  downsample_resolution:=0 \
+  fk_unique:=false
+  （4）手动采样轨迹：
+  roslaunch geomagic_control geomagic_workspace_viz.launch
+
+  📅2026.01.22 张耀华
+  -->
+
+  <!-- Geomagic Touch driver namespace / prefix -->
+  <arg name="prefix" default="Geomagic"/>
+  <arg name="device_name" default="Default Device"/>
+
+  <!-- Whether to start the driver (if you already started geomagic_headless.launch elsewhere, set false) -->
+  <arg name="start_driver" default="true"/>
+
+  <!-- Input mode for workspace sampling: tf (recommended) | pose | fk_random -->
+  <arg name="input_mode" default="tf"/>
+
+  <!-- TF mode params -->
+  <arg name="tf_parent" default="base"/>
+  <arg name="tf_child" default="stylus"/>
+
+  <!-- Pose mode params (many drivers publish pose in mm; scale 0.001 converts to meters) -->
+  <arg name="pose_topic" default="/$(arg prefix)/pose"/>
+  <arg name="scale" default="0.001"/>
+  <arg name="frame_id" default=""/> <!-- empty = follow input frame; non-empty = publish in this frame name -->
+
+  <!-- Sampling controls (tf/pose only) -->
+  <arg name="record_when_button_pressed" default="true"/>
+  <arg name="record_button" default="either"/> <!-- grey|white|either -->
+
+  <!-- Sampling mode (tf/pose only): fixed | random_time | distance -->
+  <arg name="sampling_mode" default="fixed"/>
+  <arg name="sample_rate_hz" default="500"/>
+  <arg name="sample_tick_hz" default="1000"/>
+  <arg name="min_sample_dt" default="0.0"/>
+  <arg name="min_sample_dist" default="0.0"/>
+  <arg name="random_dt_min" default="0.005"/>
+  <arg name="random_dt_max" default="0.020"/>
+
+  <!-- Downsampling / capacity -->
+  <arg name="downsample_resolution" default="0.002"/> <!-- meters; set 0 to disable -->
+  <arg name="max_points" default="20000"/>
+
+  <!-- Visualization toggles (node-level; RViz can still disable displays by checkbox) -->
+  <arg name="show_text" default="true"/>
+  <arg name="text_to_console" default="false"/>
+  <arg name="show_bbox" default="true"/>
+
+  <!-- Boundary reconstruction: none|hull|voxel -->
+  <arg name="reconstruct_mode" default="none"/>
+  <arg name="voxel_size" default="0.005"/>
+
+  <!-- Point colors: colorize by z axis -->
+  <arg name="colorize_by_z" default="true"/>
+  <arg name="z_color_min" default=""/> <!-- empty = auto；实际最小值接近：-0.03 -->
+  <arg name="z_color_max" default=""/> <!-- empty = auto；实际最大值接近：0.33 -->
+
+  <!-- fk_random (offline) sampling params -->
+  <arg name="fk_base" default="base"/>
+  <arg name="fk_tip" default="stylus"/>
+  <arg name="fk_samples" default="50000"/>
+  <arg name="fk_seed" default="-1"/> <!-- -1 = random seed -->
+  <arg name="fk_unique" default="true"/> <!-- unique by voxel (downsample_resolution) -->
+
+  <!-- Optional compatibility: publish combined MarkerArray on /geomagic_workspace/markers -->
+  <arg name="publish_combined" default="false"/>
+
+  <!-- RViz -->
+  <arg name="rviz" default="true"/>
+
+  <!-- Provide a global /robot_description so RViz RobotModel works even if you change prefix.
+       (If you already set /robot_description elsewhere, this will overwrite it.) -->
+  <param name="robot_description" command="cat $(find geomagic_description)/urdf/geomagic.urdf" />
+
+  <!-- Start driver (includes robot_state_publisher + joint_state) -->
+  <group if="$(arg start_driver)">
+    <include file="$(find geomagic_control)/launch/geomagic_headless.launch">
+      <arg name="device_name" value="$(arg device_name)"/>
+      <arg name="prefix" value="$(arg prefix)"/>
+    </include>
+  </group>
+
+  <!-- Workspace visualizer -->
+  <node name="geomagic_workspace_visualizer" pkg="geomagic_control" type="workspace_visualizer.py" output="screen">
+    <param name="input_mode" value="$(arg input_mode)"/>
+
+    <!-- TF mode -->
+    <param name="tf_parent" value="$(arg tf_parent)"/>
+    <param name="tf_child" value="$(arg tf_child)"/>
+
+    <!-- Pose mode -->
+    <param name="pose_topic" value="$(arg pose_topic)"/>
+    <param name="scale" value="$(arg scale)"/>
+    <param name="frame_id" value="$(arg frame_id)"/>
+
+    <!-- Buttons -->
+    <param name="button_topic" value="/$(arg prefix)/button"/>
+
+    <!-- Sampling (tf/pose) -->
+    <param name="record_when_button_pressed" value="$(arg record_when_button_pressed)"/>
+    <param name="record_button" value="$(arg record_button)"/>
+
+    <param name="sampling_mode" value="$(arg sampling_mode)"/>
+    <param name="sample_rate_hz" value="$(arg sample_rate_hz)"/>
+    <param name="sample_tick_hz" value="$(arg sample_tick_hz)"/>
+    <param name="min_sample_dt" value="$(arg min_sample_dt)"/>
+    <param name="min_sample_dist" value="$(arg min_sample_dist)"/>
+    <param name="random_dt_min" value="$(arg random_dt_min)"/>
+    <param name="random_dt_max" value="$(arg random_dt_max)"/>
+
+    <param name="downsample_resolution" value="$(arg downsample_resolution)"/>
+    <param name="max_points" value="$(arg max_points)"/>
+
+    <!-- Visualization -->
+    <param name="publish_text" value="$(arg show_text)"/>
+    <param name="text_to_console" value="$(arg text_to_console)"/>
+    <param name="publish_bbox" value="$(arg show_bbox)"/>
+
+    <!-- Reconstruction -->
+    <param name="reconstruct_mode" value="$(arg reconstruct_mode)"/>
+    <param name="voxel_size" value="$(arg voxel_size)"/>
+
+    <!-- Point color -->
+    <param name="colorize_by_z" value="$(arg colorize_by_z)"/>
+
+    <!-- If user sets z_color_min/max, pass them; otherwise keep auto.
+         roslaunch has no true null; we interpret empty string as unset in node. -->
+    <param if="$(eval arg('z_color_min') != '')" name="z_color_min" value="$(arg z_color_min)"/>
+    <param if="$(eval arg('z_color_max') != '')" name="z_color_max" value="$(arg z_color_max)"/>
+
+    <!-- fk_random -->
+    <param name="robot_description_param" value="robot_description"/>
+    <param name="fk_base" value="$(arg fk_base)"/>
+    <param name="fk_tip" value="$(arg fk_tip)"/>
+    <param name="fk_samples" value="$(arg fk_samples)"/>
+    <param name="fk_seed" value="$(arg fk_seed)"/>
+    <param name="fk_unique" value="$(arg fk_unique)"/>
+
+    <!-- Topics / compatibility -->
+    <param name="publish_combined" value="$(arg publish_combined)"/>
+  </node>
+
+  <!-- RViz config includes RobotModel + separate marker topics for checkbox toggles -->
+  <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find geomagic_control)/rviz/geomagic_workspace_viz.rviz" required="true" />
+  <node pkg="workspace_viz" type="axes_ticks_publisher.py" name="axes_ticks_publisher" output="screen">
+    <param name="frame" value="base"/>
+    <!-- 关键：用 rosparam 以 YAML 形式写 list，节点才能读到 list -->
+    <rosparam param="axis_bounds">
+      [[-1.0, 1.0], [-1.0, 1.0], [0.0, 2.0]]
+    </rosparam>
+  </node>
+</launch>

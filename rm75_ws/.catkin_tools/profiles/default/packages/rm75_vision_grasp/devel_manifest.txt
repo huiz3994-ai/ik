@@ -1,0 +1,7 @@
+rm75_vision_grasp
+/root/rm75_ws/devel/.private/rm75_vision_grasp/lib/librm75_vision.so /root/rm75_ws/devel/lib/librm75_vision.so
+/root/rm75_ws/devel/.private/rm75_vision_grasp/lib/rm75_vision_grasp/test_depth /root/rm75_ws/devel/lib/rm75_vision_grasp/test_depth
+/root/rm75_ws/devel/.private/rm75_vision_grasp/lib/rm75_vision_grasp/vision_node /root/rm75_ws/devel/lib/rm75_vision_grasp/vision_node
+/root/rm75_ws/devel/.private/rm75_vision_grasp/lib/pkgconfig/rm75_vision_grasp.pc /root/rm75_ws/devel/lib/pkgconfig/rm75_vision_grasp.pc
+/root/rm75_ws/devel/.private/rm75_vision_grasp/share/rm75_vision_grasp/cmake/rm75_vision_graspConfig-version.cmake /root/rm75_ws/devel/share/rm75_vision_grasp/cmake/rm75_vision_graspConfig-version.cmake
+/root/rm75_ws/devel/.private/rm75_vision_grasp/share/rm75_vision_grasp/cmake/rm75_vision_graspConfig.cmake /root/rm75_ws/devel/share/rm75_vision_grasp/cmake/rm75_vision_graspConfig.cmake

@@ -1,0 +1,188 @@
+{
+  "duration_s": 12.043435485000032,
+  "parameters": {
+    "planning_group": "arm",
+    "tip_link": "Link7",
+    "base_frame": "base_link",
+    "touch_pose_topic": "/Geomagic/pose_raw",
+    "touch_joy_topic": "/Geomagic/joy",
+    "joint_state_topic": "/joint_states",
+    "use_touch_increment": true,
+    "metres_per_touch_unit": 0.001,
+    "output_mode": "rm_joint_pos",
+    "command_topic": "/rm_driver/JointPos",
+    "motion_enabled": true,
+    "position_scale": 0.4,
+    "orientation_enabled": true,
+    "publish_rate": 50.0,
+    "ik_timeout": 0.015,
+    "command_duration": 0.1,
+    "input_timeout": 0.25,
+    "max_touch_translation": 0.08,
+    "max_joint_velocity": 0.2,
+    "force_safety_enabled": true,
+    "require_force_feedback": true,
+    "force_topic": "/rm_driver/UdpSixZeroForce",
+    "force_feedback_timeout": 0.25,
+    "max_external_force": 35.0,
+    "max_external_torque": 5.0
+  },
+  "topics": {
+    "/Geomagic/pose_raw": {
+      "count": 1205,
+      "max_gap_s": 0.011299307999991015,
+      "nonfinite_messages": 0,
+      "latest": [
+        0.0,
+        -65.51071166992188,
+        -88.11419677734375
+      ],
+      "min": [
+        0.0,
+        -65.51071166992188,
+        -88.11419677734375
+      ],
+      "max": [
+        0.0,
+        -65.51071166992188,
+        -88.11419677734375
+      ],
+      "rate_hz": 99.99718879996071,
+      "last_age_s": 0.02252358200001936
+    },
+    "/Geomagic/joy": {
+      "count": 1205,
+      "max_gap_s": 0.011696106000044892,
+      "nonfinite_messages": 0,
+      "latest": [
+        0,
+        0
+      ],
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        0,
+        0
+      ],
+      "rate_hz": 100.00249486290619,
+      "last_age_s": 0.022855395000021872
+    },
+    "/Touch_Pose_increment": {
+      "count": 3613,
+      "max_gap_s": 0.004193948000022374,
+      "nonfinite_messages": 0,
+      "latest": [
+        -20.510847091674805,
+        48.44680404663086,
+        76.4333267211914
+      ],
+      "rate_hz": 300.03621703783097,
+      "last_age_s": 0.015187335999996776
+    },
+    "/joint_states": {
+      "count": 2392,
+      "max_gap_s": 0.006178235999982462,
+      "nonfinite_messages": 0,
+      "latest": [
+        -0.17125430226325988,
+        0.37250515213012697,
+        -0.0890473528623581,
+        1.1952552383422852,
+        0.2509135449409485,
+        1.2926611511230468,
+        -1.1867046424865724
+      ],
+      "min": [
+        -0.1713415542602539,
+        0.3724702380180359,
+        -0.08908225033283233,
+        1.195167903137207,
+        0.2508786474704742,
+        1.2925738159179687,
+        -1.186757096862793
+      ],
+      "max": [
+        -0.17116705026626586,
+        0.37257494707107547,
+        -0.0889775496006012,
+        1.1952901191711427,
+        0.2509658994674683,
+        1.2926960319519043,
+        -1.1866697616577149
+      ],
+      "rate_hz": 199.98784758077593,
+      "last_age_s": 0.013105144999997265
+    },
+    "/rm_driver/UdpSixZeroForce": {
+      "count": 2392,
+      "max_gap_s": 0.006354235999992852,
+      "nonfinite_messages": 0,
+      "latest": [
+        -0.22699999809265137,
+        0.35199999809265137,
+        0.14000000059604645,
+        0.02199999988079071,
+        -0.004000000189989805,
+        0.006000000052154064
+      ],
+      "min": [
+        -0.4429999887943268,
+        0.07699999958276749,
+        -0.07800000160932541,
+        0.01600000075995922,
+        -0.00800000037997961,
+        0.0
+      ],
+      "max": [
+        0.014999999664723873,
+        0.5839999914169312,
+        0.4490000009536743,
+        0.024000000208616257,
+        0.0,
+        0.012000000104308128
+      ],
+      "rate_hz": 199.9876294895779,
+      "last_age_s": 0.01325939800000242
+    },
+    "/rm_driver/Udp_Coordinate": {
+      "count": 2393,
+      "max_gap_s": 0.006103384999960326,
+      "nonfinite_messages": 0,
+      "latest": 0,
+      "rate_hz": 199.98883988698907,
+      "last_age_s": 0.008419516000003568
+    },
+    "/rm_driver/JointPos": {
+      "count": 0,
+      "max_gap_s": 0.0,
+      "nonfinite_messages": 0
+    },
+    "/rm75_touch_teleop/active": {
+      "count": 1,
+      "max_gap_s": 0.0,
+      "nonfinite_messages": 0,
+      "latest": false,
+      "rate_hz": 0,
+      "last_age_s": 12.045413994
+    },
+    "/rm75_touch_teleop/control_mode": {
+      "count": 1,
+      "max_gap_s": 0.0,
+      "nonfinite_messages": 0,
+      "latest": "POSITION_MODE",
+      "rate_hz": 0,
+      "last_age_s": 12.043141225
+    },
+    "/rm75_touch_teleop/stop_reason": {
+      "count": 1,
+      "max_gap_s": 0.0,
+      "nonfinite_messages": 0,
+      "latest": "",
+      "rate_hz": 0,
+      "last_age_s": 12.039602752000008
+    }
+  },
+  "warnings": []
+}

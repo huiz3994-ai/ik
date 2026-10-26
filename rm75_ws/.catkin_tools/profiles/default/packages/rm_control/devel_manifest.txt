@@ -1,0 +1,5 @@
+rm_robot/rm_control
+/root/rm75_ws/devel/.private/rm_control/lib/pkgconfig/rm_control.pc /root/rm75_ws/devel/lib/pkgconfig/rm_control.pc
+/root/rm75_ws/devel/.private/rm_control/lib/rm_control/rm_control /root/rm75_ws/devel/lib/rm_control/rm_control
+/root/rm75_ws/devel/.private/rm_control/share/rm_control/cmake/rm_controlConfig-version.cmake /root/rm75_ws/devel/share/rm_control/cmake/rm_controlConfig-version.cmake
+/root/rm75_ws/devel/.private/rm_control/share/rm_control/cmake/rm_controlConfig.cmake /root/rm75_ws/devel/share/rm_control/cmake/rm_controlConfig.cmake

@@ -1,0 +1,94 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+# Match the working Unitree Z1 mapping:
+# RM75 dx=-Touch dz, dy=-Touch dx, dz=Touch dy.
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+use_touch_increment: true
+metres_per_touch_unit: 0.001
+
+# RealMan CAN-FD joint streaming interface.
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+
+# Faster teleoperation defaults; force and displacement safety gates remain active.
+position_scale: 0.8
+orientation_enabled: true
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.08
+max_joint_velocity: 0.40
+
+# RM75 six-axis force version: use compensated external wrench feedback.
+force_topic: /rm_driver/UdpSixZeroForce
+
+# Z velocity force outer loop, base_link axis; units m/(N*s), NOT m/N.
+hybrid_control_enabled: true
+desired_force: -50.0
+contact_threshold: 10.0
+release_threshold: 5.0
+force_gain: 0.002
+force_limit: 100.0
+max_external_force: 100.0
+max_external_torque: 5.0
+force_safety_enabled: true
+require_force_feedback: true
+force_feedback_timeout: 0.25
+max_z_velocity: 0.010
+max_z_step: 0.0004
+max_force_travel: 0.05
+max_z_tracking_error: 0.005
+max_joint_tracking_error: 0.15
+# Keep the redundant IK solution away from J2's +/-2.268 rad hard limits.
+# Alternative seeds are accepted only when every joint remains close to the
+# previous command, so this redistributes posture without an IK branch jump.
+j2_limit_avoidance_enabled: true
+j2_limit_avoidance_margin: 0.25
+j2_reseed_step: 0.05
+j2_reseed_timeout: 0.002
+j2_reseed_attempts: 4
+j2_reseed_max_joint_delta: 0.35
+force_deadband: 1.0
+force_filter_tau: 0.03
+contact_debounce: 0.06
+force_ramp_rate: 20.0
+force_motion_sign: 1.0
+force_sign: -1.0
+force_frame: base_link
+force_frame_rotation_rpy: [0.0, 0.0, 0.0]
+ik_failure_timeout: 0.25
+require_touch_increment: true
+
+# Verified on 2026-10-04: a base +Z load produced positive World Fz, so
+# force_sign=-1 maps upward contact reaction to the negative insertion convention.
+force_frame_verified: true
+# UDP 1 = current work frame. World was queried as identity on 2026-10-04.
+# Recheck if the controller work frame changes; polarity still needs validation.
+expected_force_coordinate: 1
+
+# Haptic feedback remains OFF unless the haptic launch entry explicitly opts in.
+# These 0.5 N limits are commissioning values and REQUIRE HARDWARE VERIFICATION.
+haptic_feedback_enabled: false
+haptic_only_in_contact: true
+haptic_require_teleop_active: true
+haptic_force_scale: 0.02
+haptic_force_filter_tau: 0.03
+haptic_force_deadband: 0.5
+haptic_damping_x: 0.0
+haptic_damping_y: 0.0
+haptic_damping_z: 0.0
+haptic_max_force_x: 0.5
+haptic_max_force_y: 0.5
+haptic_max_force_z: 0.5
+haptic_max_force_norm: 0.5
+haptic_force_ramp_rate: 2.0
+haptic_force_timeout: 0.1
+haptic_max_dt: 0.05
+haptic_force_sign: [1.0, 1.0, 1.0]
+haptic_force_rotation_rpy: [0.0, 0.0, 0.0]

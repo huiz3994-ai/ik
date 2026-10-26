@@ -1,0 +1,29 @@
+Unable to register with master node [http://localhost:11311]: master may not be running yet. Will keep trying.
+{
+  "success": false,
+  "error": "COLLISION: obstacle_box / right_finger",
+  "lift_m": 0.0,
+  "wall_seconds": 2.4728311799999574,
+  "perception_xy_error_m": 0.0014674294858447528,
+  "perception_top_surface_z_error_m": 2.9385421147831714e-05,
+  "states": [
+    "WAIT_OBJECT",
+    "VISION_DETECT",
+    "POSE_ESTIMATION",
+    "UPDATE_OBSTACLE_MAP",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "PLAN_PATH",
+    "PLAN_PATH",
+    "PLAN_PATH",
+    "PLAN_PATH",
+    "COLLISION"
+  ],
+  "direct_pregrasp_collisions": [
+    [
+      "obstacle_box",
+      "left_finger"
+    ]
+  ],
+  "gripper_model": "idealized fixed attachment"
+}

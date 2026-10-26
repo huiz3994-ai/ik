@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="470">
+<rect width="100%" height="100%" fill="white"/>
+<text x="490" y="30" text-anchor="middle" font-family="sans-serif" font-size="18">RM75 Link7 position RMS by scenario</text>
+<line x1="70" y1="400" x2="910" y2="400" stroke="black"/>
+<rect x="94.0" y="198.4" width="72.0" height="201.6" fill="#2878b5"/>
+<text x="130.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">x</text>
+<text x="130.0" y="193.4" text-anchor="middle" font-family="sans-serif" font-size="10">0.972 mm</text>
+<rect x="214.0" y="252.3" width="72.0" height="147.7" fill="#2878b5"/>
+<text x="250.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">y</text>
+<text x="250.0" y="247.3" text-anchor="middle" font-family="sans-serif" font-size="10">0.712 mm</text>
+<rect x="334.0" y="100.0" width="72.0" height="300.0" fill="#2878b5"/>
+<text x="370.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">z</text>
+<text x="370.0" y="95.0" text-anchor="middle" font-family="sans-serif" font-size="10">1.45 mm</text>
+<rect x="454.0" y="347.5" width="72.0" height="52.5" fill="#2878b5"/>
+<text x="490.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">rx</text>
+<text x="490.0" y="342.5" text-anchor="middle" font-family="sans-serif" font-size="10">0.253 mm</text>
+<rect x="574.0" y="345.1" width="72.0" height="54.9" fill="#2878b5"/>
+<text x="610.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">ry</text>
+<text x="610.0" y="340.1" text-anchor="middle" font-family="sans-serif" font-size="10">0.265 mm</text>
+<rect x="694.0" y="356.2" width="72.0" height="43.8" fill="#2878b5"/>
+<text x="730.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">rz</text>
+<text x="730.0" y="351.2" text-anchor="middle" font-family="sans-serif" font-size="10">0.211 mm</text>
+<rect x="814.0" y="247.3" width="72.0" height="152.7" fill="#2878b5"/>
+<text x="850.0" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">6d</text>
+<text x="850.0" y="242.3" text-anchor="middle" font-family="sans-serif" font-size="10">0.737 mm</text>
+</svg>

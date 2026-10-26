@@ -1,0 +1,60 @@
+# All physical values are intentionally locked until measured and approved.
+marker_type: apriltag16h5        # supplied five-code sheet, IDs 0 through 4
+base_frame: base_link
+image_topic: /camera/color/image_raw
+camera_info_topic: /camera/color/camera_info
+stability_samples: 5
+max_age_s: 0.5
+max_translation_jump_m: 0.006
+max_rotation_jump_deg: 2.0
+max_reprojection_error_px: 2.0
+
+slots:
+  - &slot0
+    id: 0
+    marker_id: 0
+    text: RM75_SLOT_0
+    name: SLOT_0
+    object_name: Object_A
+    enabled: true
+    calibrated: true            # 22.5 mm black square from supplied drawing.
+    size_m: 0.0225
+    marker_to_object:
+      translation: [0.0, 0.0, 0.0]
+      quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+      verified: false
+    marker_to_pick_tcp:
+      translation: [0.0, 0.0, 0.0]
+      quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+      verified: false
+    approach_direction_marker: [0.0, 0.0, 1.0]
+    approach_distance_m: 0.0    # TODO: validate with tooling/workcell
+    retreat_distance_m: 0.0
+    station_fixed_verified: false
+    allow_relocalization: false
+    collision_size_m: [0.0, 0.0, 0.0]
+    touch_links: [grasp_tcp]
+  - <<: *slot0
+    id: 1
+    marker_id: 1
+    text: RM75_SLOT_1
+    name: SLOT_1
+    object_name: Object_B
+  - <<: *slot0
+    id: 2
+    marker_id: 2
+    text: RM75_SLOT_2
+    name: SLOT_2
+    object_name: Object_C
+  - <<: *slot0
+    id: 3
+    marker_id: 3
+    text: RM75_SLOT_3
+    name: SLOT_3
+    object_name: Object_D
+  - <<: *slot0
+    id: 4
+    marker_id: 4
+    text: RM75_SLOT_4
+    name: SLOT_4
+    object_name: Object_E

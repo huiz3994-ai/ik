@@ -1,0 +1,28 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+# Touch_my_ws publishes millimetres. Match its working Unitree Z1 mapping:
+# RM75 dx=-Touch dz, dy=-Touch dx, dz=Touch dy.
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+command_topic: /arm/arm_joint_controller/command
+output_mode: trajectory
+motion_enabled: true
+metres_per_touch_unit: 0.001
+position_scale: 2.0
+orientation_enabled: true
+# Use Touch_my_ws/geomagic_myhaptics anchor and increment topics, matching the
+# original z1_examples pipeline. Raw pose remains an automatic fallback.
+use_touch_increment: true
+
+publish_rate: 100.0
+ik_timeout: 0.01
+command_duration: 0.08
+input_timeout: 0.15
+max_touch_translation: 0.25
+max_joint_velocity: 1.0
+
+# Optional slave-to-master haptic rendering is explicitly opt-in.
+haptic_feedback_enabled: false

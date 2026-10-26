@@ -1,0 +1,9 @@
+{
+  "planner": "RRTstar",
+  "scene": "static grasp scene, no benchmark blocker",
+  "joint1_delta_rad": 0.1,
+  "planning_budget_s": 3,
+  "success": true,
+  "moveit_error_code": 1,
+  "execution": false
+}

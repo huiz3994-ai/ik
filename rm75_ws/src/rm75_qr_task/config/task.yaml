@@ -1,0 +1,17 @@
+move_group: arm
+tcp_link: grasp_tcp
+require_map: true
+voltage_timeout_s: 5.0
+feedback_timeout_s: 0.5
+hold_feedback_topic: /qr_task/object_held
+joint_return_tolerance_rad: 0.02
+tcp_return_tolerance_m: 0.005
+tcp_return_tolerance_deg: 2.0
+target_pose_tolerance_m: 0.004
+target_pose_tolerance_deg: 2.0
+station_motion_tolerance_m: 0.005
+station_motion_tolerance_deg: 2.0
+allow_supervised_confirmation: false
+allow_supervised_recovery: false
+state_file: /root/.ros/rm75_qr_task/state.json
+archive_dir: /root/.ros/rm75_qr_task/archive

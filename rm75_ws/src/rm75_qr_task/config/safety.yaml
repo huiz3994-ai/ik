@@ -1,0 +1,15 @@
+# These commissioning facts are independent of the operator's execution request.
+# Do not set true until the named item has physical evidence and sign-off.
+verifications:
+  marker_geometry_verified: false
+  hand_eye_calibrated: true       # User-confirmed 2026-10-11.
+  tcp_verified: false
+  tool_geometry_verified: false
+  object_geometry_verified: false
+  payload_verified: false
+  hold_feedback_verified: false
+  voltage_interface_verified: true  # User-confirmed 2026-10-11.
+  collision_scene_verified: false
+  execution_monitor_verified: false
+  stop_verified: false
+  single_command_source_verified: true  # User-confirmed 2026-10-11.

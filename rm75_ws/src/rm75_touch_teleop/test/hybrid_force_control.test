@@ -1,0 +1,138 @@
+<launch>
+  <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node" name="test_joint" output="screen">
+    <rosparam command="load" file="$(find rm75_touch_teleop)/config/rm75_touch_sampling_sim.yaml"/>
+    <param name="output_mode" value="rm_joint_pos"/>
+    <param name="hybrid_control_enabled" value="true"/>
+    <param name="motion_enabled" value="true"/>
+    <param name="force_frame_verified" value="true"/>
+    <param name="expected_force_coordinate" value="0"/>
+    <param name="force_safety_enabled" value="true"/>
+    <param name="require_force_feedback" value="true"/>
+    <param name="force_filter_tau" value="0.0"/>
+    <param name="use_touch_increment" value="true"/>
+    <param name="require_touch_increment" value="true"/>
+    <param name="max_touch_translation" value="10.0"/>
+    <param name="max_joint_velocity" value="0.2"/>
+    <param name="publish_rate" value="50.0"/>
+    <param name="ik_timeout" value="0.01"/>
+    <param name="touch_pose_topic" value="/test/joint/pose"/>
+    <param name="touch_joy_topic" value="/test/joint/joy"/>
+    <param name="joint_state_topic" value="/test/joint/joints"/>
+    <param name="command_topic" value="/test/joint/command"/>
+    <param name="force_topic" value="/test/joint/force"/>
+    <remap from="/Touch_Pose_increment" to="/test/joint/increment"/>
+    <remap from="/Touch_Anchor_updated" to="/test/joint/anchor"/>
+    <remap from="/rm_driver/Udp_Coordinate" to="/test/joint/coordinate"/>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/joint/stop"/>
+  </node>
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node" name="test_trajectory" output="screen">
+    <rosparam command="load" file="$(find rm75_touch_teleop)/config/rm75_touch_sampling_sim.yaml"/>
+    <param name="output_mode" value="trajectory"/>
+    <param name="hybrid_control_enabled" value="true"/>
+    <param name="motion_enabled" value="true"/>
+    <param name="force_frame_verified" value="true"/>
+    <param name="expected_force_coordinate" value="-1"/>
+    <param name="force_safety_enabled" value="true"/>
+    <param name="require_force_feedback" value="true"/>
+    <param name="force_filter_tau" value="0.0"/>
+    <param name="use_touch_increment" value="true"/>
+    <param name="require_touch_increment" value="true"/>
+    <param name="max_touch_translation" value="10.0"/>
+    <param name="max_joint_velocity" value="0.2"/>
+    <param name="publish_rate" value="50.0"/>
+    <param name="ik_timeout" value="0.01"/>
+    <param name="touch_pose_topic" value="/test/trajectory/pose"/>
+    <param name="touch_joy_topic" value="/test/trajectory/joy"/>
+    <param name="joint_state_topic" value="/test/trajectory/joints"/>
+    <param name="command_topic" value="/test/trajectory/command"/>
+    <param name="force_topic" value="/test/trajectory/force"/>
+    <remap from="/Touch_Pose_increment" to="/test/trajectory/increment"/>
+    <remap from="/Touch_Anchor_updated" to="/test/trajectory/anchor"/>
+    <remap from="/rm_driver/Udp_Coordinate" to="/test/trajectory/coordinate"/>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/trajectory/stop"/>
+  </node>
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node" name="test_plain" output="screen">
+    <rosparam command="load" file="$(find rm75_touch_teleop)/config/rm75_touch_sampling_sim.yaml"/>
+    <param name="output_mode" value="trajectory"/>
+    <param name="hybrid_control_enabled" value="false"/>
+    <param name="motion_enabled" value="true"/>
+    <param name="force_frame_verified" value="true"/>
+    <param name="expected_force_coordinate" value="-1"/>
+    <param name="force_safety_enabled" value="false"/>
+    <param name="require_force_feedback" value="false"/>
+    <param name="force_filter_tau" value="0.0"/>
+    <param name="use_touch_increment" value="true"/>
+    <param name="require_touch_increment" value="true"/>
+    <param name="max_touch_translation" value="10.0"/>
+    <param name="max_joint_velocity" value="0.2"/>
+    <param name="publish_rate" value="50.0"/>
+    <param name="ik_timeout" value="0.01"/>
+    <param name="touch_pose_topic" value="/test/plain/pose"/>
+    <param name="touch_joy_topic" value="/test/plain/joy"/>
+    <param name="joint_state_topic" value="/test/plain/joints"/>
+    <param name="command_topic" value="/test/plain/command"/>
+    <param name="force_topic" value="/test/plain/force"/>
+    <remap from="/Touch_Pose_increment" to="/test/plain/increment"/>
+    <remap from="/Touch_Anchor_updated" to="/test/plain/anchor"/>
+    <remap from="/rm_driver/Udp_Coordinate" to="/test/plain/coordinate"/>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/plain/stop"/>
+  </node>
+  <!-- Dedicated virtual plant for the Web contract: only robot Z may move,
+       orientation is locked, and the reflected force may only drive Touch Y. -->
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node" name="test_z_only" output="screen">
+    <rosparam command="load" file="$(find rm75_touch_teleop)/config/rm75_touch_z_force_haptic_real.yaml"/>
+    <param name="output_mode" value="trajectory"/>
+    <param name="command_topic" value="/test/z_only/command"/>
+    <param name="motion_enabled" value="true"/>
+    <param name="haptic_feedback_enabled" value="true"/>
+    <param name="force_frame_verified" value="true"/>
+    <param name="expected_force_coordinate" value="-1"/>
+    <param name="force_filter_tau" value="0.0"/>
+    <param name="contact_debounce" value="0.0"/>
+    <param name="haptic_force_filter_tau" value="0.0"/>
+    <param name="haptic_force_deadband" value="0.0"/>
+    <param name="haptic_force_ramp_rate" value="10.0"/>
+    <param name="use_touch_increment" value="true"/>
+    <param name="require_touch_increment" value="true"/>
+    <param name="max_touch_translation" value="10.0"/>
+    <param name="max_z_position_travel" value="0.004"/>
+    <param name="max_joint_velocity" value="0.2"/>
+    <param name="publish_rate" value="50.0"/>
+    <param name="ik_timeout" value="0.01"/>
+    <param name="touch_pose_topic" value="/test/z_only/pose"/>
+    <param name="touch_joy_topic" value="/test/z_only/joy"/>
+    <param name="joint_state_topic" value="/test/z_only/joints"/>
+    <param name="force_topic" value="/test/z_only/force"/>
+    <remap from="/Touch_Pose_increment" to="/test/z_only/increment"/>
+    <remap from="/Touch_Anchor_updated" to="/test/z_only/anchor"/>
+    <remap from="/rm_driver/Udp_Coordinate" to="/test/z_only/coordinate"/>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/z_only/stop"/>
+  </node>
+  <!-- A disarmed hardware-output node is allowed to observe over-force, but it
+       must never emit a motion command or an Emergency_Stop request. -->
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node" name="test_observe" output="screen">
+    <rosparam command="load" file="$(find rm75_touch_teleop)/config/rm75_touch_sampling_sim.yaml"/>
+    <param name="output_mode" value="rm_joint_pos"/>
+    <param name="hybrid_control_enabled" value="true"/>
+    <param name="motion_enabled" value="false"/>
+    <param name="force_frame_verified" value="false"/>
+    <param name="expected_force_coordinate" value="0"/>
+    <param name="force_safety_enabled" value="true"/>
+    <param name="require_force_feedback" value="true"/>
+    <param name="force_filter_tau" value="0.0"/>
+    <param name="touch_pose_topic" value="/test/observe/pose"/>
+    <param name="touch_joy_topic" value="/test/observe/joy"/>
+    <param name="joint_state_topic" value="/test/observe/joints"/>
+    <param name="command_topic" value="/test/observe/command"/>
+    <param name="force_topic" value="/test/observe/force"/>
+    <remap from="/Touch_Pose_increment" to="/test/observe/increment"/>
+    <remap from="/Touch_Anchor_updated" to="/test/observe/anchor"/>
+    <remap from="/rm_driver/Udp_Coordinate" to="/test/observe/coordinate"/>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/observe/stop"/>
+  </node>
+  <test test-name="hybrid_ros" pkg="rm75_touch_teleop" type="hybrid_force_control_ros_test.py" time-limit="110"/>
+</launch>

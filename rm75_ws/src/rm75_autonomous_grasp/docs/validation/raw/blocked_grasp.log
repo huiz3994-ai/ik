@@ -1,0 +1,19 @@
+Unable to register with master node [http://localhost:11311]: master may not be running yet. Will keep trying.
+{
+  "success": false,
+  "error": "TIMEOUT: monitored OctoMap update stale",
+  "lift_m": 0.0,
+  "wall_seconds": 15.819260604999954,
+  "perception_xy_error_m": 0.0013995123665012923,
+  "perception_top_surface_z_error_m": 2.893862164213279e-05,
+  "states": [
+    "WAIT_OBJECT",
+    "VISION_DETECT",
+    "POSE_ESTIMATION",
+    "UPDATE_OBSTACLE_MAP",
+    "PLAN_PATH",
+    "TIMEOUT"
+  ],
+  "direct_pregrasp_collisions": [],
+  "gripper_model": "idealized fixed attachment"
+}

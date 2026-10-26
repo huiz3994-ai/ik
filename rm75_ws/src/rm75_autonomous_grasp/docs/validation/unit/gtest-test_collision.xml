@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-02T15:36:13" name="AllTests">
+  <testsuite name="FCL" tests="1" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-02T15:36:13">
+    <testcase name="InterpolatedSegmentHitsObstacle" status="run" result="completed" time="0.001" timestamp="2026-10-02T15:36:13" classname="FCL" />
+  </testsuite>
+</testsuites>

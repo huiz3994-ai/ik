@@ -1,0 +1,7 @@
+string grasp_mode
+---
+bool success
+string error
+---
+string state
+string detail

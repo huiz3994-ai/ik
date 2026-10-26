@@ -1,0 +1,6 @@
+# Gazebo and MoveIt consume the same dimensions/poses (meters).
+objects:
+  - {id: table, type: box, size: [0.65, 0.70, 0.12], xyz: [0.48, 0.0, 0.06], color: [0.55, 0.55, 0.55, 1]}
+  - {id: obstacle_box, type: box, size: [0.01, 0.08, 0.16], xyz: [0.28, 0.02, 0.20], color: [0.15, 0.2, 0.8, 1]}
+  - {id: obstacle_cylinder, type: cylinder, size: [0.16, 0.035], xyz: [0.5, 0.19, 0.20], color: [0.2, 0.65, 0.2, 1]}
+target: {id: target, type: box, size: [0.04, 0.04, 0.04], xyz: [0.34, 0.045, 0.145], color: [1, 0, 0, 1]}

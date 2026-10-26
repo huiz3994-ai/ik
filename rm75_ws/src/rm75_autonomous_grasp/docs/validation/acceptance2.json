@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "error": "",
+  "lift_m": 0.11993451490262691,
+  "wall_seconds": 35.06967642500001,
+  "perception_xy_error_m": 0.0010413792325251433,
+  "perception_top_surface_z_error_m": 2.7382986548224464e-05,
+  "states": [
+    "WAIT_OBJECT",
+    "VISION_DETECT",
+    "POSE_ESTIMATION",
+    "UPDATE_OBSTACLE_MAP",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "GRASP",
+    "LIFT",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY"
+  ],
+  "direct_pregrasp_collisions": [
+    [
+      "obstacle_box",
+      "left_finger"
+    ],
+    [
+      "obstacle_box",
+      "right_finger"
+    ]
+  ],
+  "gripper_model": "idealized fixed attachment"
+}

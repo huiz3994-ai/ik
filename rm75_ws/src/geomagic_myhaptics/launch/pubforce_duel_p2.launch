@@ -1,0 +1,5 @@
+<launch>
+
+    <include file="$(find geomagic_control)/launch/geomagic_duel_headless_p2.launch" />
+    <node pkg="geomagic_myhaptics" type="pubforce_touch2" name="pubforce_touch2" output="screen" />
+</launch>

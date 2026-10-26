@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rm75_kinematics_optimization</name>
+  <version>0.1.0</version>
+  <description>Offline RM75-6FB kinematics, adaptive DLS IK, redundancy optimization and benchmarks.</description>
+  <maintainer email="zjh@example.com">zjh</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>roscpp</depend>
+  <depend>kdl_parser</depend>
+  <depend>orocos_kdl</depend>
+  <depend>urdf</depend>
+  <exec_depend>rm_description</exec_depend>
+  <test_depend>rostest</test_depend>
+  <export/>
+</package>

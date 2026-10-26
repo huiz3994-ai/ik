@@ -1,0 +1,14 @@
+{
+  "model": "RM75-6FB",
+  "base": "base_link",
+  "tip": "Link7",
+  "seed": 7506,
+  "samples": 10000,
+  "target_sampling": "uniform central 82% of each joint range; independent central-55% seeds; deterministic near-limit and zero seeds",
+  "solvers": {
+    "kdl": {"success_rate": 0.6749, "mean_time_ms": 0.470578, "p50_time_ms": 0.195969, "p95_time_ms": 1.14185, "p99_time_ms": 1.19487, "mean_final_position_error_m": 0.0467561, "mean_final_orientation_error_rad": 0.221729, "success_mean_position_error_m": 9.61537e-08, "success_mean_orientation_error_rad": 3.565e-07, "max_final_position_error_m": 1.12302, "mean_joint_delta_rad": 5.54326, "mean_min_limit_margin_rad": 0.263524, "numeric_anomalies": 0, "failures": {"MAX_ITERATIONS":3251}},
+    "legacy_fixed_dls": {"success_rate": 0.652, "mean_time_ms": 0.136913, "p50_time_ms": 0.135751, "p95_time_ms": 0.227498, "p99_time_ms": 0.274921, "mean_final_position_error_m": 0.146839, "mean_final_orientation_error_rad": 0.475762, "success_mean_position_error_m": 0.0010421, "success_mean_orientation_error_rad": 0.0030154, "max_final_position_error_m": 1.15195, "mean_joint_delta_rad": 2.50506, "mean_min_limit_margin_rad": 0.508603, "numeric_anomalies": 0, "failures": {"MAX_ITERATIONS":1,"UNREACHABLE_OR_STALLED":3479}},
+    "adaptive_dls": {"success_rate": 0.6785, "mean_time_ms": 0.175569, "p50_time_ms": 0.136916, "p95_time_ms": 0.439814, "p99_time_ms": 1.03937, "mean_final_position_error_m": 0.128797, "mean_final_orientation_error_rad": 0.406431, "success_mean_position_error_m": 0.00110589, "success_mean_orientation_error_rad": 0.00335529, "max_final_position_error_m": 1.11439, "mean_joint_delta_rad": 2.41087, "mean_min_limit_margin_rad": 0.557315, "numeric_anomalies": 0, "failures": {"MAX_ITERATIONS":159,"UNREACHABLE_OR_STALLED":3056}},
+    "adaptive_dls_nullspace": {"success_rate": 0.6857, "mean_time_ms": 0.208261, "p50_time_ms": 0.148222, "p95_time_ms": 0.691763, "p99_time_ms": 1.15503, "mean_final_position_error_m": 0.108188, "mean_final_orientation_error_rad": 0.331117, "success_mean_position_error_m": 0.00103158, "success_mean_orientation_error_rad": 0.00377568, "max_final_position_error_m": 1.11416, "mean_joint_delta_rad": 2.49321, "mean_min_limit_margin_rad": 0.592431, "numeric_anomalies": 0, "failures": {"MAX_ITERATIONS":346,"UNREACHABLE_OR_STALLED":2797}}
+  }
+}

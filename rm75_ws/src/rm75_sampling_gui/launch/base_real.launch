@@ -1,0 +1,89 @@
+<launch>
+  <!-- HMI-owned composition of existing RM75 components. No control algorithm
+       is implemented here. Real execution is OFF unless explicitly armed. -->
+  <arg name="execution_enabled" default="false"/>
+  <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="touch_z_force_authorized" default="false"/>
+  <arg name="tool5_drill_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <!-- JointControlServer streams a time-parameterized trajectory at 50 Hz,
+       so use the vendor driver's high-follow pass-through mode only for that
+       mutually-exclusive execution path.  Legacy/QR mode keeps low follow. -->
+  <arg name="driver_follow" default="$(arg joint_control_execution_authorized)"/>
+  <arg name="arm_ip" default="192.168.1.18"/>
+  <arg name="arm_port" default="8080"/>
+  <arg name="udp_ip" default="192.168.1.100"/>
+  <arg name="udp_port" default="8089"/>
+  <arg name="task_config" default="$(find rm75_autonomous_grasp)/config/task.yaml"/>
+  <!-- Only the QR/legacy composition exposes follow_joint_trajectory.
+       Joint, Z-force and Tool5 paths use their dedicated mutually-exclusive
+       command source while retaining MoveIt's planning/collision services. -->
+  <arg name="moveit_execution_enabled"
+       default="$(eval not (arg('joint_control_execution_authorized') or arg('touch_z_force_authorized') or arg('tool5_drill_authorized')))"/>
+
+  <param name="/use_sim_time" value="false"/>
+  <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+
+  <!-- MoveGroup initializes a controller-manager plugin even when trajectory
+       execution is disabled.  Supply the parameter-only fake manager for
+       dedicated control paths so MoveGroup stays useful for planning and FCL
+       checks without gaining a second real robot command output. -->
+  <group unless="$(arg moveit_execution_enabled)">
+    <include ns="move_group"
+             file="$(find rm_75_moveit_config)/launch/fake_moveit_controller_manager.launch.xml">
+      <arg name="fake_execution_type" value="last point"/>
+    </include>
+  </group>
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" output="screen"/>
+
+  <include file="$(find rm_driver)/launch/rm_75_driver.launch">
+    <arg name="Arm_IP" value="$(arg arm_ip)"/>
+    <arg name="Arm_Port" value="$(arg arm_port)"/>
+    <arg name="Arm_Dof" value="7"/>
+    <arg name="Arm_Type" value="RM75"/>
+    <arg name="Udp_IP" value="$(arg udp_ip)"/>
+    <arg name="Udp_Port" value="$(arg udp_port)"/>
+    <arg name="Udp_cycle" value="5"/>
+    <arg name="Udp_force_coordinate" value="1"/>
+    <arg name="is_4th_Gen" value="true"/>
+    <arg name="Follow" value="$(arg driver_follow)"/>
+    <arg name="trajectory_mode" value="0"/>
+    <arg name="radio" value="0"/>
+  </include>
+
+  <include file="$(find rm_75_moveit_config)/launch/move_group.launch">
+    <arg name="allow_trajectory_execution" value="$(arg moveit_execution_enabled)"/>
+    <arg name="fake_execution" value="false"/>
+    <!-- The real bridge serves /rm_group/follow_joint_trajectory. -->
+    <arg name="real_moveit_controller_manager" value="rm_75_real"/>
+    <arg name="load_robot_description" value="false"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+  <group unless="$(arg joint_control_execution_authorized)">
+    <group unless="$(arg touch_z_force_authorized)">
+      <group unless="$(arg tool5_drill_authorized)">
+        <node name="trajectory_bridge" pkg="rm75_autonomous_grasp"
+              type="trajectory_bridge" output="screen">
+        <rosparam command="load" file="$(arg task_config)"/>
+        <param name="execute" value="$(arg execution_enabled)"/>
+        <!-- The single-marker task has independently verified hand-eye and
+             direct Link7 targets.  Its electromagnet uses voltage-command ACK,
+             not the legacy jaw gripper's object-detected feedback. -->
+        <param name="hand_eye_calibrated" value="true"/>
+        <param name="tool_verified" value="true"/>
+        <param name="stop_verified" value="true"/>
+        <param name="require_gripper_feedback" value="false"/>
+        </node>
+      </group>
+    </group>
+  </group>
+  <group if="$(arg joint_control_execution_authorized)">
+    <node name="joint_control_server" pkg="rm75_sampling_gui"
+          type="joint_control_server.py" output="screen"
+          args="--authorized $(arg supervised_commissioning_authorized) --config $(find rm75_sampling_gui)/config/gui.yaml"/>
+  </group>
+</launch>

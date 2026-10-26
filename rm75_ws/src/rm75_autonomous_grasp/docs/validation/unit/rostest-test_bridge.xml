@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuite errors="0" failures="0" name="unittest.suite.TestSuite" tests="1" time="8.042"><testcase classname="rostest.runner.RosTest" name="testbridge_contract" time="8.0415" /><system-out>&lt;![CDATA[
+[ROSTEST]setup[/root/rm75_ws/src/rm75_autonomous_grasp/test/bridge.test] run_id[01061cae-be77-11f1-a5ee-8cf8c57f097c] starting
+&amp;#x001B;[1mstarted roslaunch server http://zjh-Dell-G15-5520:44037/&amp;#x001B;[0m
+
+SUMMARY
+========
+
+PARAMETERS
+ * /bridge/execute: True
+ * /bridge/gripper_feedback_verified: True
+ * /bridge/hand_eye_calibrated: True
+ * /bridge/stop_verified: True
+ * /bridge/tool_verified: True
+ * /robot_description: &lt;?xml version="1....
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+  /
+    bridge (rm75_autonomous_grasp/trajectory_bridge)
+
+[ROSTEST]setup[/root/rm75_ws/src/rm75_autonomous_grasp/test/bridge.test] run_id[01061cae-be77-11f1-a5ee-8cf8c57f097c] done
+[ROSTEST]Running test [bridge_contract]
+&amp;#x001B;[1mROS_MASTER_URI=http://zjh-Dell-G15-5520:44801/&amp;#x001B;[0m
+&amp;#x001B;[1msetting /run_id to 01061cae-be77-11f1-a5ee-8cf8c57f097c&amp;#x001B;[0m
+&amp;#x001B;[1mprocess[bridge-1]: started with pid [17014]&amp;#x001B;[0m
+[ROSTEST]running test bridge_contract
+&amp;#x001B;[1mprocess[bridge_contract-2]: started with pid [17015]&amp;#x001B;[0m
+&amp;#x001B;[1m[bridge_contract-2] process has finished cleanly
+log file: /root/.ros/log/01061cae-be77-11f1-a5ee-8cf8c57f097c/bridge_contract-2*.log&amp;#x001B;[0m
+[ROSTEST]test [bridge_contract] finished
+[ROSTEST]test [bridge_contract] results are in [/root/rm75_ws/build/rm75_autonomous_grasp/test_results/rm75_autonomous_grasp/rosunit-bridge_contract.xml]
+[ROSTEST]test [bridge_contract] results summary: 0 errors, 0 failures, 1 tests
+[ROSTEST][ROSTEST] test [bridge_contract] done
+[ROSTEST]tearDown[/root/rm75_ws/src/rm75_autonomous_grasp/test/bridge.test]
+shutting down processing monitor...
+[bridge-1] killing on exit
+... shutting down processing monitor complete
+[ROSTEST]rostest teardown /root/rm75_ws/src/rm75_autonomous_grasp/test/bridge.test complete
+
+]]&gt;</system-out><system-err>&lt;![CDATA[
+
+]]&gt;</system-err></testsuite>

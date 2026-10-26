@@ -1,0 +1,18 @@
+parameters:
+  eye_on_hand: true
+  freehand_robot_movement: false
+  move_group: arm
+  move_group_namespace: /
+  namespace: /rm75_d435i_eye_on_hand/
+  robot_base_frame: base_link
+  robot_effector_frame: Link7
+  tracking_base_frame: camera_link
+  tracking_marker_frame: camera_marker
+transformation:
+  qw: 0.4229704862271499
+  qx: -0.5498337057238825
+  qy: -0.44158837563710795
+  qz: -0.5690154394503646
+  x: 0.07033723319318709
+  y: 0.06063859603440629
+  z: 0.08579782351272223

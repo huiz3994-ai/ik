@@ -1,0 +1,231 @@
+tools:
+- name: Tool1
+  slot_id: 1
+  marker_id: 0
+  display_name: Tool1
+  reference_controller_pose:
+  - -120.806
+  - 254.971
+  - 217.749
+  - 3.073
+  - -0.047
+  - 1.497
+  configured_pick:
+    position_m:
+    - -0.195112
+    - 0.287729
+    - 0.121949
+    rpy_rad:
+    - 3.02
+    - -0.042
+    - -0.076
+    lift_height_m: 0.2
+    updated_at: 1792584633.94201
+- name: Tool2
+  slot_id: 2
+  marker_id: 0
+  display_name: Tool2
+  reference_controller_pose:
+  - -189.102
+  - 258.388
+  - 213.392
+  - 3.135
+  - -0.026
+  - -1.618
+  configured_pick:
+    position_m:
+    - -0.189102
+    - 0.258388
+    - 0.213392
+    rpy_rad:
+    - 3.135
+    - -0.026
+    - -1.618
+    lift_height_m: 0.2
+- name: Tool3
+  slot_id: 3
+  marker_id: 0
+  display_name: Tool3
+  reference_controller_pose:
+  - -119.581
+  - 326.464
+  - 211.952
+  - -3.126
+  - 0.021
+  - 1.553
+  configured_pick:
+    position_m:
+    - -0.119581
+    - 0.326464
+    - 0.211952
+    rpy_rad:
+    - -3.126
+    - 0.021
+    - 1.553
+    lift_height_m: 0.2
+- name: Tool4
+  slot_id: 4
+  marker_id: 0
+  display_name: Tool4
+  reference_controller_pose:
+  - -189.641
+  - 328.648
+  - 211.018
+  - -3.124
+  - -0.019
+  - -1.728
+  configured_pick:
+    position_m:
+    - -0.189641
+    - 0.328648
+    - 0.211018
+    rpy_rad:
+    - -3.124
+    - -0.019
+    - -1.728
+    lift_height_m: 0.2
+- name: Tool5
+  slot_id: 5
+  marker_id: 0
+  display_name: Tool5
+  reference_controller_pose:
+  - -249.211
+  - 116.644
+  - 177.064
+  - -3.137
+  - 0.019
+  - -1.608
+  configured_pick:
+    position_m:
+    - -0.105208
+    - 0.263142
+    - 0.152255
+    rpy_rad:
+    - -3.088
+    - -0.044
+    - 1.828
+    lift_height_m: 0.1
+    updated_at: 1792928296.7329223
+mode: single_marker_five_targets
+marker_type: apriltag16h5
+base_frame: base_link
+image_topic: /camera/color/image_raw
+camera_info_topic: /camera/color/camera_info
+stability_samples: 5
+max_age_s: 0.5
+max_translation_jump_m: 0.006
+max_rotation_jump_deg: 2.0
+max_reprojection_error_px: 2.0
+legacy_multi_marker_slots:
+- id: 0
+  marker_id: 0
+  text: RM75_TOOL_1
+  name: Tool1
+  object_name: Tool1
+  enabled: true
+  calibrated: true
+  size_m: 0.0225
+  marker_to_object: &id001
+    translation:
+    - 0.0
+    - 0.0
+    - 0.0
+    quaternion_xyzw:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    verified: false
+  marker_to_pick_tcp: &id002
+    translation:
+    - 0.0
+    - 0.0
+    - 0.0
+    quaternion_xyzw:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    verified: false
+  approach_direction_marker: &id003
+  - 0.0
+  - 0.0
+  - 1.0
+  approach_distance_m: 0.0
+  retreat_distance_m: 0.0
+  station_fixed_verified: false
+  allow_relocalization: false
+  collision_size_m: &id004
+  - 0.0
+  - 0.0
+  - 0.0
+  touch_links: &id005
+  - grasp_tcp
+- id: 1
+  marker_id: 1
+  text: RM75_TOOL_2
+  name: Tool2
+  object_name: Tool2
+  enabled: true
+  calibrated: true
+  size_m: 0.0225
+  marker_to_object: *id001
+  marker_to_pick_tcp: *id002
+  approach_direction_marker: *id003
+  approach_distance_m: 0.0
+  retreat_distance_m: 0.0
+  station_fixed_verified: false
+  allow_relocalization: false
+  collision_size_m: *id004
+  touch_links: *id005
+- id: 2
+  marker_id: 2
+  text: RM75_TOOL_3
+  name: Tool3
+  object_name: Tool3
+  enabled: true
+  calibrated: true
+  size_m: 0.0225
+  marker_to_object: *id001
+  marker_to_pick_tcp: *id002
+  approach_direction_marker: *id003
+  approach_distance_m: 0.0
+  retreat_distance_m: 0.0
+  station_fixed_verified: false
+  allow_relocalization: false
+  collision_size_m: *id004
+  touch_links: *id005
+- id: 3
+  marker_id: 3
+  text: RM75_TOOL_4
+  name: Tool4
+  object_name: Tool4
+  enabled: true
+  calibrated: true
+  size_m: 0.0225
+  marker_to_object: *id001
+  marker_to_pick_tcp: *id002
+  approach_direction_marker: *id003
+  approach_distance_m: 0.0
+  retreat_distance_m: 0.0
+  station_fixed_verified: false
+  allow_relocalization: false
+  collision_size_m: *id004
+  touch_links: *id005
+- id: 4
+  marker_id: 4
+  text: RM75_TOOL_5
+  name: Tool5
+  object_name: Tool5
+  enabled: true
+  calibrated: true
+  size_m: 0.0225
+  marker_to_object: *id001
+  marker_to_pick_tcp: *id002
+  approach_direction_marker: *id003
+  approach_distance_m: 0.0
+  retreat_distance_m: 0.0
+  station_fixed_verified: false
+  allow_relocalization: false
+  collision_size_m: *id004
+  touch_links: *id005

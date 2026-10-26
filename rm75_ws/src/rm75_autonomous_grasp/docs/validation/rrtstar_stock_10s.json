@@ -1,0 +1,34 @@
+{
+  "straight_path_blocked": true,
+  "valid_start_and_goal": true,
+  "start": [
+    9.115844012441698e-05,
+    0.2999428890512128,
+    4.6857565970448434e-05,
+    0.9000004234498373,
+    -9.994528082035714e-05,
+    1.9399867598713545,
+    -7.222429005793174e-05
+  ],
+  "goal": [
+    0.8000911584401245,
+    0.2999428890512128,
+    4.6857565970448434e-05,
+    0.9000004234498373,
+    -9.994528082035714e-05,
+    1.9399867598713545,
+    -7.222429005793174e-05
+  ],
+  "results": [
+    {
+      "planner": "RRTstar",
+      "success": false,
+      "validated_collision_free": false,
+      "planning_seconds": null,
+      "wall_seconds": 10.01232492600002,
+      "joint_path_length_rad": 0,
+      "waypoints": 0,
+      "error_code": -1
+    }
+  ]
+}

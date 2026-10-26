@@ -1,0 +1,31 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+# Match the working Unitree Z1 mapping:
+# dx=-Touch dz, dy=-Touch dx, dz=Touch dy.
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+use_touch_increment: true
+metres_per_touch_unit: 0.001
+
+# RealMan's JointPos topic is the CAN-FD streaming input used by rm_driver.
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+
+# Overwritten by real_touch.launch's enable_motion argument.
+motion_enabled: false
+
+# Faster hardware defaults; retain the existing displacement and model limits.
+position_scale: 1.0
+orientation_enabled: true
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.10
+max_joint_velocity: 0.50
+
+# Legacy real teleoperation remains haptic-free unless explicitly enabled.
+haptic_feedback_enabled: false

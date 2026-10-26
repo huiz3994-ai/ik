@@ -1,0 +1,22 @@
+<launch>
+  <!-- Start the HMI only. Base, camera, QR and control nodes are launched by
+       operator buttons and are never duplicated implicitly before the UI. -->
+  <arg name="config" default="$(find rm75_sampling_gui)/config/gui.yaml"/>
+  <arg name="tools" default="$(find rm75_sampling_gui)/config/tools.yaml"/>
+  <arg name="execution_enabled" default="false"/>
+  <arg name="qr_execution_authorized" default="false"/>
+  <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="trajectory_execution_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <!-- Retained as no-op compatibility arguments. Nodes now start in the UI. -->
+  <arg name="start_qr_task" default="false"/>
+  <arg name="start_marker" default="true"/>
+  <arg name="publish_handeye_tf" default="false"/>
+
+  <node pkg="rm75_sampling_gui"
+        type="sampling_gui.py"
+        name="rm75_sampling_gui"
+        output="screen"
+        args="--config $(arg config) --tools $(arg tools) --execution-enabled $(arg execution_enabled) --qr-execution-authorized $(arg qr_execution_authorized) --joint-control-execution-authorized $(arg joint_control_execution_authorized) --trajectory-execution-authorized $(arg trajectory_execution_authorized) --supervised-commissioning-authorized $(arg supervised_commissioning_authorized)"
+        required="false"/>
+</launch>

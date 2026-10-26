@@ -1,0 +1,8 @@
+<launch>
+ <arg name="config" default="$(find rm75_vision_grasp)/config/vision.yaml"/>
+ <arg name="detector" default="color"/>
+ <node name="vision" pkg="rm75_vision_grasp" type="vision_node" output="screen">
+  <rosparam command="load" file="$(arg config)"/>
+  <param name="detector" value="$(arg detector)"/>
+ </node>
+</launch>

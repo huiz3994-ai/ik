@@ -1,0 +1,34 @@
+<launch>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <arg name="device_name" default="Default Device"/>
+  <arg name="config" default="$(find rm75_touch_teleop)/config/rm75_touch.yaml"/>
+  <arg name="motion_enabled" default="true"/>
+  <arg name="haptic_feedback" default="false"/>
+
+  <!-- Imported from Touch_my_ws. It deliberately shares the main ROS graph. -->
+  <group ns="Geomagic" if="$(arg start_touch_driver)">
+    <node pkg="geomagic_control" type="device_node" name="Geomagic"
+          output="screen" required="true">
+      <param name="device_name" value="$(arg device_name)"/>
+    </node>
+  </group>
+
+  <!-- New Touch helper: grey publishes position deltas; white publishes
+       relative orientation.  Keep v1.6_pubforce.launch for legacy users only. -->
+  <node if="$(arg start_touch_helpers)" pkg="geomagic_myhaptics"
+        type="pubforce" name="touch_pubforce" output="screen"/>
+
+  <!-- RM75 adaptation of z1_examples/get_end_effector_pose.cpp. -->
+  <node if="$(arg start_touch_helpers)" pkg="rm75_touch_examples"
+        type="rm75_get_end_effector_pose" name="rm75_get_end_effector_pose"
+        output="screen"/>
+
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node"
+        name="rm75_touch_teleop" output="screen" required="true">
+    <rosparam command="load" file="$(arg config)"/>
+    <param name="motion_enabled" value="$(arg motion_enabled)"/>
+    <!-- Explicit launch override keeps every legacy entry haptic-OFF. -->
+    <param name="haptic_feedback_enabled" value="$(arg haptic_feedback)"/>
+  </node>
+</launch>

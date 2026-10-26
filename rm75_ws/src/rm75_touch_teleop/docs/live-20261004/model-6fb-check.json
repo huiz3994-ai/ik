@@ -1,0 +1,19 @@
+{
+  "fk_position_m": [
+    0.34699825269198004,
+    -0.047431436546839165,
+    0.3287640064933975
+  ],
+  "controller_position_m": [
+    0.34693199396133423,
+    -0.04740399867296219,
+    0.32867100834846497
+  ],
+  "position_error_mm": 0.11743811677037704,
+  "orientation_error_deg": 0.05469215203395096,
+  "joint7_origin": {
+    "rpy": "0 0 0",
+    "xyz": "0 0 0.1612"
+  },
+  "assumption": "World identity and zero TCP offset; stationary robot"
+}

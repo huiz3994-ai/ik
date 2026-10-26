@@ -1,0 +1,94 @@
+_______________________________________________________________________________
+Warnings << rm75_autonomous_grasp:check /root/rm75_ws/logs/rm75_autonomous_grasp/test.check.004.log
+...............................................................................
+_______________________________________________________________________________
+Warnings << rm75_autonomous_grasp:make /root/rm75_ws/logs/rm75_autonomous_grasp/test.make.004.log
+...............................................................................
+Starting >>> rm75_vision_grasp             
+Starting >>> rm75_autonomous_grasp         
+Output << rm75_vision_grasp:make /root/rm75_ws/logs/rm75_vision_grasp/test.make.004.log
+-- run_tests.py: execute commands
+  /root/rm75_ws/devel/.private/rm75_vision_grasp/lib/rm75_vision_grasp/test_depth --gtest_output=xml:/root/rm75_ws/build/rm75_vision_grasp/test_results/rm75_vision_grasp/gtest-test_depth.xml
+[==========] Running 6 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from Depth
+[ RUN      ] Depth.MillimeterMeterEquivalence
+[       OK ] Depth.MillimeterMeterEquivalence (0 ms)
+[ RUN      ] Depth.RejectInvalid
+[       OK ] Depth.RejectInvalid (0 ms)
+[ RUN      ] Depth.RejectPixelAndIntrinsicsNaN
+[       OK ] Depth.RejectPixelAndIntrinsicsNaN (0 ms)
+[ RUN      ] Depth.CompensateRawColorDistortion
+[       OK ] Depth.CompensateRawColorDistortion (0 ms)
+[----------] 4 tests from Depth (0 ms total)
+
+[----------] 2 tests from Detector
+[ RUN      ] Detector.RedCentroid
+[       OK ] Detector.RedCentroid (1 ms)
+[ RUN      ] Detector.AprilTagIdentity
+[       OK ] Detector.AprilTagIdentity (3 ms)
+[----------] 2 tests from Detector (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 6 tests from 2 test suites ran. (4 ms total)
+[  PASSED  ] 6 tests.
+cd /root/rm75_ws/build/rm75_vision_grasp; catkin test --get-env rm75_vision_grasp | catkin env -si  /usr/bin/make run_tests; cd -
+
+Output << rm75_vision_grasp:results /root/rm75_ws/logs/rm75_vision_grasp/test.results.004.log
+Summary: 12 tests, 0 errors, 0 failures, 0 skipped
+cd /root/rm75_ws/build/rm75_vision_grasp; catkin test --get-env rm75_vision_grasp | catkin env -si  catkin_test_results; cd -
+
+Finished <<< rm75_vision_grasp              [ 1.1 seconds ]
+WARNING: package 'gazebo_ros' is deprecated (This package has been deprecated as of January 2025 with Gazebo classic 11 reaching
+      end-of-life. Users are highly encouraged to migrate to the new Gazebo
+      using our migration guides (https://gazebosim.org/docs/latest/gazebo_classic_migration))
+WARNING: package 'gazebo_msgs' is deprecated (This package has been deprecated as of January 2025 with Gazebo classic 11 reaching
+      end-of-life. Users are highly encouraged to migrate to the new Gazebo
+      using our migration guides (https://gazebosim.org/docs/latest/gazebo_classic_migration))
+cd /root/rm75_ws/build/rm75_autonomous_grasp; catkin test --get-env rm75_autonomous_grasp | catkin env -si  /usr/bin/make cmake_check_build_system; cd -
+
+-- run_tests.py: execute commands
+  /root/rm75_ws/devel/.private/rm75_autonomous_grasp/lib/rm75_autonomous_grasp/test_collision --gtest_output=xml:/root/rm75_ws/build/rm75_autonomous_grasp/test_results/rm75_autonomous_grasp/gtest-test_collision.xml
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from FCL
+[ RUN      ] FCL.InterpolatedSegmentHitsObstacle
+[0m[INFO] [1790955373.850705672]: Loading robot model 'test'...[0m
+[0m[INFO] [1790955373.850734044]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[       OK ] FCL.InterpolatedSegmentHitsObstacle (1 ms)
+[----------] 1 test from FCL (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (1 ms total)
+[  PASSED  ] 1 test.
+-- run_tests.py: execute commands
+  /usr/bin/python3 /opt/ros/noetic/share/rostest/cmake/../../../bin/rostest --pkgdir=/root/rm75_ws/src/rm75_autonomous_grasp --package=rm75_autonomous_grasp --results-filename test_bridge.xml --results-base-dir "/root/rm75_ws/build/rm75_autonomous_grasp/test_results" /root/rm75_ws/src/rm75_autonomous_grasp/test/bridge.test
+... logging to /root/.ros/log/rostest-zjh-Dell-G15-5520-16996.log
+[ROSUNIT] Outputting test results to /root/rm75_ws/build/rm75_autonomous_grasp/test_results/rm75_autonomous_grasp/rostest-test_bridge.xml
+[31m[ERROR] [1790955375.485920932]: Robot semantic description not found. Did you forget to define or remap '/robot_description_semantic'?[0m
+[Testcase: testbridge_contract] ... ok
+
+[ROSTEST]-----------------------------------------------------------------------
+
+[rm75_autonomous_grasp.rosunit-bridge_contract/test_contract][passed]
+
+SUMMARY
+[32m * RESULT: SUCCESS[0m
+ * TESTS: 1
+ * ERRORS: 0
+ * FAILURES: 0
+
+rostest log file is in /root/.ros/log/rostest-zjh-Dell-G15-5520-16996.log
+cd /root/rm75_ws/build/rm75_autonomous_grasp; catkin test --get-env rm75_autonomous_grasp | catkin env -si  /usr/bin/make run_tests; cd -
+
+Output << rm75_autonomous_grasp:results /root/rm75_ws/logs/rm75_autonomous_grasp/test.results.004.log
+Summary: 4 tests, 0 errors, 0 failures, 0 skipped
+cd /root/rm75_ws/build/rm75_autonomous_grasp; catkin test --get-env rm75_autonomous_grasp | catkin env -si  catkin_test_results; cd -
+
+Finished <<< rm75_autonomous_grasp          [ 27.3 seconds ]
+[test] Summary: All 2 packages succeeded!
+[test] Ignored: None.
+[test] Warnings: 1 packages succeeded with warnings.
+[test] Abandoned: No packages were abandoned.
+[test] Failed: No packages failed.
+[test] Runtime: 27.4 seconds total.

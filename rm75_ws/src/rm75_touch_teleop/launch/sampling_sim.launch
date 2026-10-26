@@ -1,0 +1,26 @@
+<launch>
+  <arg name="gazebo_gui" default="true"/>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <arg name="initialize_forward_pose" default="true"/>
+  <arg name="config" default="$(find rm75_touch_teleop)/config/rm75_touch_sampling_sim.yaml"/>
+  <arg name="haptic_feedback" default="false"/>
+  <arg name="surface_enabled" default="false"/>
+  <arg name="surface_z" default="0.30"/>
+  <arg name="stiffness" default="5000.0"/>
+  <arg name="damping" default="20.0"/>
+  <include file="$(find rm75_touch_teleop)/launch/sim_touch.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
+    <arg name="start_touch_driver" value="$(arg start_touch_driver)"/>
+    <arg name="start_touch_helpers" value="$(arg start_touch_helpers)"/>
+    <arg name="initialize_forward_pose" value="$(arg initialize_forward_pose)"/>
+    <arg name="haptic_feedback" value="$(arg haptic_feedback)"/>
+  </include>
+  <node pkg="rm75_touch_teleop" type="sampling_soil_sim_node" name="sampling_soil" output="screen" required="true">
+    <param name="surface_enabled" value="$(arg surface_enabled)"/>
+    <param name="surface_z" value="$(arg surface_z)"/>
+    <param name="stiffness" value="$(arg stiffness)"/>
+    <param name="damping" value="$(arg damping)"/>
+  </node>
+</launch>

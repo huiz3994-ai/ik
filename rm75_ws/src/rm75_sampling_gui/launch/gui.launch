@@ -1,0 +1,15 @@
+<launch>
+  <!-- Backwards-compatible safe entry: real command execution remains OFF. -->
+  <arg name="execution_enabled" default="false"/>
+  <arg name="qr_execution_authorized" default="false"/>
+  <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="trajectory_execution_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <include file="$(find rm75_sampling_gui)/launch/gui_real.launch">
+    <arg name="execution_enabled" value="$(arg execution_enabled)"/>
+    <arg name="qr_execution_authorized" value="$(arg qr_execution_authorized)"/>
+    <arg name="joint_control_execution_authorized" value="$(arg joint_control_execution_authorized)"/>
+    <arg name="trajectory_execution_authorized" value="$(arg trajectory_execution_authorized)"/>
+    <arg name="supervised_commissioning_authorized" value="$(arg supervised_commissioning_authorized)"/>
+  </include>
+</launch>

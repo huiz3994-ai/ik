@@ -1,0 +1,4 @@
+# No 3D perception sensor is present in the stock RM75 Gazebo model.
+# Empty placeholder entries make MoveIt try to create two octomap updaters and
+# emit an error for each one, so keep the updater list genuinely empty.
+sensors: []

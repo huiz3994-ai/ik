@@ -1,0 +1,8 @@
+geomagic_myhaptics
+/root/rm75_ws/devel/.private/geomagic_myhaptics/lib/pkgconfig/geomagic_myhaptics.pc /root/rm75_ws/devel/lib/pkgconfig/geomagic_myhaptics.pc
+/root/rm75_ws/devel/.private/geomagic_myhaptics/lib/geomagic_myhaptics/pubforce_touch1 /root/rm75_ws/devel/lib/geomagic_myhaptics/pubforce_touch1
+/root/rm75_ws/devel/.private/geomagic_myhaptics/lib/geomagic_myhaptics/pubforce /root/rm75_ws/devel/lib/geomagic_myhaptics/pubforce
+/root/rm75_ws/devel/.private/geomagic_myhaptics/lib/geomagic_myhaptics/pubforce_single /root/rm75_ws/devel/lib/geomagic_myhaptics/pubforce_single
+/root/rm75_ws/devel/.private/geomagic_myhaptics/lib/geomagic_myhaptics/pubforce_touch2 /root/rm75_ws/devel/lib/geomagic_myhaptics/pubforce_touch2
+/root/rm75_ws/devel/.private/geomagic_myhaptics/share/geomagic_myhaptics/cmake/geomagic_myhapticsConfig.cmake /root/rm75_ws/devel/share/geomagic_myhaptics/cmake/geomagic_myhapticsConfig.cmake
+/root/rm75_ws/devel/.private/geomagic_myhaptics/share/geomagic_myhaptics/cmake/geomagic_myhapticsConfig-version.cmake /root/rm75_ws/devel/share/geomagic_myhaptics/cmake/geomagic_myhapticsConfig-version.cmake

@@ -1,0 +1,12 @@
+arm:
+  arm_joint_controller:
+    constraints:
+      goal_time: 3.0
+      stopped_velocity_tolerance: 0.05
+      joint1: {trajectory: 0.2, goal: 0.02}
+      joint2: {trajectory: 0.2, goal: 0.02}
+      joint3: {trajectory: 0.2, goal: 0.02}
+      joint4: {trajectory: 0.2, goal: 0.02}
+      joint5: {trajectory: 0.2, goal: 0.02}
+      joint6: {trajectory: 0.2, goal: 0.02}
+      joint7: {trajectory: 0.2, goal: 0.02}

@@ -1,0 +1,9 @@
+<launch>
+  <!-- Real RM75 execution through /rm_group/follow_joint_trajectory. -->
+  <arg name="fake_execution_type" default="FollowJointTrajectory" />
+  <arg name="moveit_controller_manager"
+       default="moveit_simple_controller_manager/MoveItSimpleControllerManager" />
+  <param name="moveit_controller_manager" value="$(arg moveit_controller_manager)"/>
+  <param name="use_controller_manager" value="true" />
+  <rosparam file="$(find rm_75_moveit_config)/config/controllers.yaml"/>
+</launch>

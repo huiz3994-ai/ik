@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "error": "",
+  "lift_m": 0.11772695250426418,
+  "wall_seconds": 18.28854263400001,
+  "perception_xy_error_m": 0.001419965186175904,
+  "perception_top_surface_z_error_m": 3.189829094962793e-05,
+  "states": [
+    "WAIT_OBJECT",
+    "VISION_DETECT",
+    "POSE_ESTIMATION",
+    "UPDATE_OBSTACLE_MAP",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "GRASP",
+    "LIFT",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "SUCCESS"
+  ],
+  "gripper_model": "idealized fixed attachment"
+}

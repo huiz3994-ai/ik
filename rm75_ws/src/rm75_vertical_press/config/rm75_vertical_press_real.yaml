@@ -1,0 +1,72 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+metres_per_touch_unit: 0.001
+
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+
+# White-only control uses the original Touch translation mapping. Grey-only
+# maps Touch rotation to end-effector orientation.
+position_scale: 0.8
+publish_rate: 50.0
+ik_timeout: 0.015
+input_timeout: 0.25
+max_touch_translation: 0.08
+max_joint_velocity: 1.20
+# At 1.20 rad/s the real RM75 reports about 0.17 rad of normal servo lag.
+# Keep a 0.30 rad watchdog: permissive enough for that lag, but it still stops
+# the controller if the arm falls roughly 0.25 s behind the command stream.
+max_joint_tracking_error: 0.30
+
+# Avoid following one redundant IK branch until J2 reaches its hard limit.
+# Reseeded solutions must stay close to the previous seven-joint command.
+j2_limit_avoidance_enabled: true
+j2_limit_avoidance_margin: 0.25
+j2_reseed_step: 0.05
+j2_reseed_timeout: 0.002
+j2_reseed_attempts: 4
+j2_reseed_max_joint_delta: 0.35
+
+# Grey+white locks X/Y and orientation, then descends along base_link -Z.
+# The tool must already be vertical before both buttons are pressed. These conservative
+# defaults mean 50 mm/s and at most 50 mm of free-space travel per engagement.
+direct_press_speed: 0.050
+direct_press_max_travel: 0.05
+# Start descending only after Link7 +Z is within 3 degrees of base_link -Z.
+vertical_alignment_tolerance: 0.0523598776
+
+force_topic: /rm_driver/UdpSixZeroForce
+desired_force: -50.0
+contact_threshold: 10.0
+release_threshold: 5.0
+force_gain: 0.002
+force_limit: 100.0
+max_external_force: 100.0
+max_external_torque: 5.0
+force_feedback_timeout: 0.25
+max_z_velocity: 0.005
+max_z_step: 0.0002
+max_force_travel: 0.05
+max_z_tracking_error: 0.005
+force_deadband: 1.0
+force_filter_tau: 0.03
+contact_debounce: 0.06
+force_ramp_rate: 20.0
+force_motion_sign: 1.0
+
+# Dedicated Tool5 mode is opt-in from the Web launch.  The relative-depth
+# calculation uses actual base_link -> Link7 feedback while orientation is
+# locked; no unmeasured Tool5 tip offset is invented here.
+tool5_drill_enabled: false
+tool5_drill_max_feed_travel: 0.05
+
+# Verified installation values copied from the existing sampling controller.
+# Re-verify both if the RM controller work frame is changed.
+force_sign: -1.0
+force_frame_verified: true
+expected_force_coordinate: 1

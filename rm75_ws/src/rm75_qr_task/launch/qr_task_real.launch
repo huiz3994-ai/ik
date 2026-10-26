@@ -1,0 +1,29 @@
+<launch>
+  <!-- Read-only/planning entry. Enabling execution also requires every safety flag. -->
+  <arg name="execution_authorized" default="false"/>
+  <arg name="start_marker" default="true"/>
+  <arg name="publish_handeye_tf" default="false"/>
+  <arg name="markers_config" default="$(find rm75_qr_task)/config/markers.yaml"/>
+  <arg name="task_config" default="$(find rm75_qr_task)/config/task.yaml"/>
+  <arg name="safety_config" default="$(find rm75_qr_task)/config/safety.yaml"/>
+  <arg name="state_file" default="/root/.ros/rm75_qr_task/state.json"/>
+
+  <!-- Must remain false if robot_description or easy_handeye already publishes camera_link. -->
+  <include if="$(arg publish_handeye_tf)"
+           file="$(find rm75_qr_task)/launch/publish_handeye_tf.launch"/>
+
+  <node if="$(arg start_marker)" pkg="rm75_qr_task" type="marker_node.py"
+        name="rm75_qr_marker" output="screen">
+    <param name="markers_config" value="$(arg markers_config)"/>
+  </node>
+  <node pkg="rm75_qr_task" type="task_server.py" name="rm75_qr_task_server"
+        output="screen">
+    <param name="markers_config" value="$(arg markers_config)"/>
+    <param name="task_config" value="$(arg task_config)"/>
+    <param name="safety_config" value="$(arg safety_config)"/>
+    <param name="state_file" value="$(arg state_file)"/>
+    <param name="execution_authorized" value="$(arg execution_authorized)"/>
+    <param name="simulation" value="false"/>
+    <param name="use_mock_adapters" value="false"/>
+  </node>
+</launch>

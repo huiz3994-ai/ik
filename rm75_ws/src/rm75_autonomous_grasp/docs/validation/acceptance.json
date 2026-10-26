@@ -1,0 +1,25 @@
+Unable to register with master node [http://localhost:11311]: master may not be running yet. Will keep trying.
+{
+  "success": false,
+  "error": "IK_FAIL: no collision-free goal within joint margin",
+  "lift_m": 0.0,
+  "wall_seconds": 27.240738253000018,
+  "perception_xy_error_m": 0.0010953587751468563,
+  "perception_top_surface_z_error_m": 2.8355902752186246e-05,
+  "states": [
+    "WAIT_OBJECT",
+    "VISION_DETECT",
+    "POSE_ESTIMATION",
+    "UPDATE_OBSTACLE_MAP",
+    "PLAN_PATH",
+    "EXECUTE_TRAJECTORY",
+    "PLAN_PATH"
+  ],
+  "direct_pregrasp_collisions": [
+    [
+      "obstacle_box",
+      "left_finger"
+    ]
+  ],
+  "gripper_model": "idealized fixed attachment"
+}

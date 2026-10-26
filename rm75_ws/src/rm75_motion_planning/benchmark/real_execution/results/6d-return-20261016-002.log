@@ -1,0 +1,102 @@
+Warning: link 'bottom_link' material 'Brown' undefined.
+         at line 84 in /build/urdfdom-VnCcob/urdfdom-1.0.4+ds/urdf_parser/src/model.cpp
+Warning: link 'bottom_link' material 'Brown' undefined.
+         at line 84 in /build/urdfdom-VnCcob/urdfdom-1.0.4+ds/urdf_parser/src/model.cpp
+Warning: link 'bottom_link' material 'Brown' undefined.
+         at line 84 in /build/urdfdom-VnCcob/urdfdom-1.0.4+ds/urdf_parser/src/model.cpp
+Warning: link 'bottom_link' material 'Brown' undefined.
+         at line 84 in /build/urdfdom-VnCcob/urdfdom-1.0.4+ds/urdf_parser/src/model.cpp
+[0m[INFO] [1792152100.739610947]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1792152100.741233430]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+preflight=PASS
+data_source=real_robot
+reference_frame=base_link_to_Link7
+start_Link7_xyz_m=0.10927074 0.30647621 0.56226906
+start_Link7_quaternion_xyzw= 0.62547896  0.63193893  0.41511141 -0.19264416
+target_Link7_xyz_m=0.10441079 0.30151055 0.55735547
+target_Link7_quaternion_xyzw= 0.62531365  0.63872301  0.41756753 -0.16325781
+ik_status=SUCCESS
+ik_dls_calls=6
+ik_refinements=0
+ik_fallback_calls=0
+trajectory_samples=305
+trajectory_duration_sec=6.08000000
+execution=PASS
+elapsed_sec=6.10013045
+actual_Link7_xyz_m=0.10447063 0.30201302 0.55794518
+actual_Link7_quaternion_xyzw= 0.62507161  0.63849422  0.41751240 -0.16520897
+final_Link7_position_error_m=0.00077705
+final_Link7_orientation_error_rad=0.00396031
+max_Link7_tracking_position_error_m=0.00097909
+rms_Link7_tracking_position_error_m=0.00066537
+max_Link7_tracking_orientation_error_rad=0.00734244
+rms_Link7_tracking_orientation_error_rad=0.00507844
+max_joint_tracking_error_rad=0.00793427
+max_joint_change_rad=0.06904966
+rms_joint_tracking_error_rad=0.00283958
+actual_control_frequency_hz=50.00024582
+mean_command_period_ms=19.99990167
+max_command_period_ms=20.20287200
+actual_feedback_frequency_hz=207.20868365
+mean_feedback_age_ms=1.26842045
+max_feedback_age_ms=6.05988503
+estimated_dropped_feedback_frames=0
+max_measured_velocity_rad_s=0.04042205
+max_measured_acceleration_rad_s2=10.40817056
+guard_warn_samples=0
+fcl_collision_count=0
+peak_force_n=2.52127457
+peak_torque_nm=0.13397761
+estop_count=0
+control_failure_count=0
+[31mWARNING: disk usage in log directory [/root/.ros/log] is over 1GB.
+It's recommended that you use the 'rosclean' command.[0m
+... logging to /root/.ros/log/e67fe430-c891-11f1-92c5-04bf1b2f815e/roslaunch-zjh-Dell-G15-5520-36013.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+]2;/root/rm75_ws/src/rm75_motion_planning/launch/cartesian_commissioning.launch
+[1mstarted roslaunch server http://zjh-Dell-G15-5520:41903/[0m
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rm75_cartesian_commissioning/dpitch: -0.037118177
+ * /rm75_cartesian_commissioning/droll: -0.033561123
+ * /rm75_cartesian_commissioning/dx: -0.00485995
+ * /rm75_cartesian_commissioning/dy: -0.00496566
+ * /rm75_cartesian_commissioning/dyaw: -0.033428378
+ * /rm75_cartesian_commissioning/dz: -0.00491359
+ * /rm75_cartesian_commissioning/execute: True
+ * /rm75_cartesian_commissioning/feedback_timeout_sec: 0.1
+ * /rm75_cartesian_commissioning/force_stop_n: 8.0
+ * /rm75_cartesian_commissioning/force_warning_n: 6.0
+ * /rm75_cartesian_commissioning/joint_limit_margin_rad: 0.02
+ * /rm75_cartesian_commissioning/link7_speed_mps: 0.01
+ * /rm75_cartesian_commissioning/max_tracking_error_rad: 0.03
+ * /rm75_cartesian_commissioning/raw_output_csv: /root/rm75_ws/src...
+ * /rm75_cartesian_commissioning/repetition: 2
+ * /rm75_cartesian_commissioning/run_id: 6d-return-2026101...
+ * /rm75_cartesian_commissioning/run_summary_json: /root/rm75_ws/src...
+ * /rm75_cartesian_commissioning/scenario: 6d
+ * /rm75_cartesian_commissioning/stop_observation_sec: 2.0
+ * /rm75_cartesian_commissioning/torque_stop_nm: 0.5
+ * /rm75_cartesian_commissioning/torque_warning_nm: 0.4
+ * /rm75_cartesian_commissioning/warning_limit_margin_rad: 0.05
+ * /rm75_cartesian_commissioning/warning_tracking_ratio: 0.8
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+  /
+    rm75_cartesian_commissioning (rm75_motion_planning/rm75_cartesian_commissioning)
+
+[1mROS_MASTER_URI=http://localhost:11311[0m
+]2;/root/rm75_ws/src/rm75_motion_planning/launch/cartesian_commissioning.launch http://localhost:11311
+[1mprocess[rm75_cartesian_commissioning-1]: started with pid [36044][0m
+[1m[rm75_cartesian_commissioning-1] process has finished cleanly
+log file: /root/.ros/log/e67fe430-c891-11f1-92c5-04bf1b2f815e/rm75_cartesian_commissioning-1*.log[0m
+all processes on machine have died, roslaunch will exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m

@@ -1,0 +1,15 @@
+{
+  "model": "RM75-6FB",
+  "solver": "CasADi 3.7.2 / Ipopt",
+  "seed": 7506,
+  "samples": 1000,
+  "success_rate": 0.923,
+  "mean_time_ms": 3.8138684947844013,
+  "p50_time_ms": 3.6490954989858437,
+  "p95_time_ms": 6.692596552602481,
+  "p99_time_ms": 9.257161916320905,
+  "success_mean_position_error_m": 0.0004945131805394394,
+  "orientation_tasks_success_mean_error_rad": 0.0020738023691392066,
+  "failure_count": 77,
+  "numeric_error_count": 0
+}

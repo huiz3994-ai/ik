@@ -1,0 +1,32 @@
+<launch>
+  <!-- HMI only. Base/camera/QR remain operator-managed through the reviewed
+       SystemLaunchManager. All real authorization defaults stay false. -->
+  <arg name="config" default="$(find rm75_sampling_gui)/config/gui.yaml"/>
+  <arg name="tools" default="$(find rm75_sampling_gui)/config/tools.yaml"/>
+  <arg name="frontend" default="$(find rm75_sampling_gui)/web/frontend/dist"/>
+  <arg name="port" default="8088"/>
+  <arg name="simulation" default="false"/>
+  <arg name="execution_enabled" default="false"/>
+  <arg name="qr_execution_authorized" default="false"/>
+  <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="touch_z_force_authorized" default="false"/>
+  <arg name="tool5_drill_authorized" default="false"/>
+  <arg name="trajectory_execution_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <arg name="sampling_hardware_authorized" default="false"/>
+  <arg name="unified_control_authorized" default="false"/>
+  <node pkg="rm75_sampling_gui" type="sampling_web.py" name="rm75_sampling_web"
+        output="screen" required="false"
+        launch-prefix="/root/rm75_ws/.venv-rm75-web/bin/python"
+        args="--config $(arg config) --tools $(arg tools) --frontend $(arg frontend) --port $(arg port)
+              --simulation $(arg simulation)
+              --execution-enabled $(arg execution_enabled)
+              --qr-execution-authorized $(arg qr_execution_authorized)
+              --joint-control-execution-authorized $(arg joint_control_execution_authorized)
+              --touch-z-force-authorized $(arg touch_z_force_authorized)
+              --tool5-drill-authorized $(arg tool5_drill_authorized)
+              --trajectory-execution-authorized $(arg trajectory_execution_authorized)
+              --supervised-commissioning-authorized $(arg supervised_commissioning_authorized)
+              --sampling-hardware-authorized $(arg sampling_hardware_authorized)
+              --unified-control-authorized $(arg unified_control_authorized)"/>
+</launch>

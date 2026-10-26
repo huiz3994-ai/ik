@@ -1,0 +1,78 @@
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+
+# Touch_my_ws publishes millimetres. Match its working Unitree Z1 mapping:
+# RM75 dx=-Touch dz, dy=-Touch dx, dz=Touch dy.
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+command_topic: /arm/arm_joint_controller/command
+output_mode: trajectory
+motion_enabled: true
+metres_per_touch_unit: 0.001
+position_scale: 2.0
+orientation_enabled: true
+# Use Touch_my_ws/geomagic_myhaptics anchor and increment topics, matching the
+# original z1_examples pipeline. Raw pose remains an automatic fallback.
+use_touch_increment: true
+
+publish_rate: 100.0
+ik_timeout: 0.01
+command_duration: 0.08
+input_timeout: 0.15
+max_touch_translation: 0.25
+max_joint_velocity: 1.0
+
+# Z velocity force outer loop, base_link axis; units m/(N*s), NOT m/N.
+hybrid_control_enabled: true
+desired_force: -50.0
+contact_threshold: 10.0
+release_threshold: 5.0
+force_gain: 0.002
+force_limit: 100.0
+max_external_force: 100.0
+max_external_torque: 5.0
+force_safety_enabled: true
+require_force_feedback: true
+force_feedback_timeout: 0.25
+max_z_velocity: 0.010
+max_z_step: 0.0004
+max_force_travel: 0.05
+max_z_tracking_error: 0.005
+max_joint_tracking_error: 0.15
+force_deadband: 1.0
+force_filter_tau: 0.03
+contact_debounce: 0.06
+force_ramp_rate: 20.0
+force_motion_sign: 1.0
+force_sign: 1.0
+force_frame: base_link
+force_frame_rotation_rpy: [0.0, 0.0, 0.0]
+ik_failure_timeout: 0.25
+require_touch_increment: true
+
+force_topic: /sampling_sim/wrench
+force_frame_verified: true
+expected_force_coordinate: -1
+
+# Haptic rendering is opt-in at launch. 0.5 N limits are conservative
+# commissioning values and REQUIRE HARDWARE VERIFICATION for this device.
+haptic_feedback_enabled: false
+haptic_only_in_contact: true
+haptic_require_teleop_active: true
+haptic_force_scale: 0.02
+haptic_force_filter_tau: 0.03
+haptic_force_deadband: 0.5
+haptic_damping_x: 0.0
+haptic_damping_y: 0.0
+haptic_damping_z: 0.0
+haptic_max_force_x: 0.5
+haptic_max_force_y: 0.5
+haptic_max_force_z: 0.5
+haptic_max_force_norm: 0.5
+haptic_force_ramp_rate: 2.0
+haptic_force_timeout: 0.1
+haptic_max_dt: 0.05
+haptic_force_sign: [1.0, 1.0, 1.0]
+haptic_force_rotation_rpy: [0.0, 0.0, 0.0]

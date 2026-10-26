@@ -1,0 +1,21 @@
+{
+  "mode": "cloud_loss",
+  "injected": true,
+  "task_success": false,
+  "error": "TIMEOUT: obstacle cloud stale",
+  "cancel_latency_wall_s": 1.900757287000033,
+  "states": [
+    "IDLE: ",
+    "WAIT_OBJECT: ",
+    "VISION_DETECT: ",
+    "POSE_ESTIMATION: ",
+    "UPDATE_OBSTACLE_MAP: ",
+    "PLAN_PATH: select feasible pregrasp",
+    "EXECUTE_TRAJECTORY: pregrasp",
+    "PLAN_PATH: ",
+    "EXECUTE_TRAJECTORY: ",
+    "TIMEOUT: TIMEOUT: obstacle cloud stale"
+  ],
+  "execute_calls": 2,
+  "obstacle_source": "Gazebo RGB-D only; no CollisionObject insertion"
+}

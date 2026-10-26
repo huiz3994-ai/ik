@@ -1,0 +1,23 @@
+{
+  "mode": "recovery",
+  "injected": true,
+  "task_success": false,
+  "error": "IK_FAIL: no collision-free goal within joint margin",
+  "cancel_latency_wall_s": 1.0773635959999979,
+  "states": [
+    "IDLE: ",
+    "WAIT_OBJECT: ",
+    "VISION_DETECT: ",
+    "POSE_ESTIMATION: ",
+    "UPDATE_OBSTACLE_MAP: ",
+    "PLAN_PATH: select feasible pregrasp",
+    "EXECUTE_TRAJECTORY: pregrasp",
+    "PLAN_PATH: ",
+    "EXECUTE_TRAJECTORY: ",
+    "COLLISION: COLLISION: <octomap> / left_finger",
+    "PLAN_PATH: Replan from measured stopped state",
+    "IK_FAIL: IK_FAIL: no collision-free goal within joint margin"
+  ],
+  "execute_calls": 2,
+  "obstacle_source": "Gazebo RGB-D only; no CollisionObject insertion"
+}

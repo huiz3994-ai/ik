@@ -1,0 +1,19 @@
+{
+  "mode": "recovery",
+  "injected": false,
+  "task_success": false,
+  "error": "JOINT_LIMIT",
+  "cancel_latency_wall_s": null,
+  "states": [
+    "IDLE: ",
+    "WAIT_OBJECT: ",
+    "VISION_DETECT: ",
+    "POSE_ESTIMATION: ",
+    "UPDATE_OBSTACLE_MAP: ",
+    "PLAN_PATH: select feasible pregrasp",
+    "EXECUTE_TRAJECTORY: pregrasp",
+    "PLAN_FAIL: JOINT_LIMIT"
+  ],
+  "execute_calls": 1,
+  "obstacle_source": "Gazebo RGB-D only; no CollisionObject insertion"
+}

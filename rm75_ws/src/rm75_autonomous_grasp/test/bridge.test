@@ -1,0 +1,9 @@
+<launch>
+ <param name="robot_description" command="$(find xacro)/xacro '$(find rm75_autonomous_grasp)/urdf/system.urdf.xacro' simulation:=false"/>
+ <node name="bridge" pkg="rm75_autonomous_grasp" type="trajectory_bridge">
+  <param name="execute" value="true"/><param name="hand_eye_calibrated" value="true"/>
+  <param name="tool_verified" value="true"/><param name="stop_verified" value="true"/>
+  <param name="gripper_feedback_verified" value="true"/>
+ </node>
+ <test test-name="bridge_contract" pkg="rm75_autonomous_grasp" type="test_bridge.py" time-limit="40"/>
+</launch>

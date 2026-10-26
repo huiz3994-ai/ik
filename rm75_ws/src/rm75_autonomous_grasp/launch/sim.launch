@@ -1,0 +1,21 @@
+<launch>
+ <arg name="detector" default="color"/>
+ <arg name="gui" default="true"/><arg name="rviz" default="false"/><arg name="execute" default="true"/>
+ <arg name="task_config" default="$(find rm75_autonomous_grasp)/config/task.yaml"/>
+ <param name="scene_ready" value="false"/><param name="observation_ready" value="false"/>
+ <node name="init_sim" pkg="rm75_autonomous_grasp" type="init_sim.py" output="screen"/>
+ <param name="use_sim_time" value="true"/>
+ <param name="robot_description" command="$(find xacro)/xacro '$(find rm75_autonomous_grasp)/urdf/system.urdf.xacro' simulation:=true link7_type:=Link7_6fb"/>
+ <include file="$(find gazebo_ros)/launch/empty_world.launch"><arg name="world_name" value="$(find rm75_autonomous_grasp)/worlds/grasp.world"/><arg name="gui" value="$(arg gui)"/><arg name="paused" value="false"/></include>
+ <node name="spawn_rm75" pkg="gazebo_ros" type="spawn_model" args="-urdf -param robot_description -model rm_75" output="screen"/>
+ <rosparam command="load" file="$(find rm_gazebo)/config/RM75/rm_75_trajectory_control.yaml"/>
+ <rosparam command="load" file="$(find rm_gazebo)/config/RM75/arm_gazebo_joint_states.yaml"/>
+ <rosparam command="load" file="$(find rm75_autonomous_grasp)/config/sim_control.yaml"/>
+ <node name="controllers" pkg="controller_manager" type="spawner" ns="arm" args="joint_state_controller arm_joint_controller"/>
+ <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"><remap from="joint_states" to="/arm/joint_states"/></node>
+ <node name="joint_state_relay" pkg="topic_tools" type="relay" args="/arm/joint_states /joint_states"/>
+ <include file="$(find rm75_autonomous_grasp)/launch/moveit.launch"/>
+ <node name="scene_manager" pkg="rm75_autonomous_grasp" type="scene_manager.py" output="screen"><rosparam command="load" file="$(find rm75_autonomous_grasp)/config/scene.yaml"/></node>
+ <include file="$(find rm75_autonomous_grasp)/launch/pipeline.launch"><arg name="detector" value="$(arg detector)"/><arg name="execute" value="$(arg execute)"/><arg name="task_config" value="$(arg task_config)"/></include>
+ <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find rm_gazebo)/config/RM75/rviz_gazebo.rviz"/>
+</launch>

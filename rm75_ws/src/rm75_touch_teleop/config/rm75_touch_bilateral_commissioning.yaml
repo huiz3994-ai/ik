@@ -1,0 +1,69 @@
+# Deterministic real-hardware commissioning profile for bilateral feedback.
+# The real Touch remains connected for force output, while robot motion input
+# comes from isolated synthetic pose/button topics.  Do not use this profile
+# as the normal operator entry point.
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+touch_pose_topic: /commissioning/touch_pose
+touch_joy_topic: /commissioning/touch_joy
+joint_state_topic: /joint_states
+use_touch_increment: false
+require_touch_increment: false
+metres_per_touch_unit: 0.001
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+position_scale: 0.6
+orientation_enabled: false
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.08
+max_joint_velocity: 0.30
+
+force_topic: /rm_driver/UdpSixZeroForce
+hybrid_control_enabled: false
+force_safety_enabled: true
+require_force_feedback: true
+force_feedback_timeout: 0.25
+force_startup_grace_period: 5.0
+max_external_force: 10.0
+max_external_torque: 1.0
+max_joint_tracking_error: 0.08
+force_frame: base_link
+force_frame_rotation_rpy: [0.0, 0.0, 0.0]
+force_frame_verified: true
+expected_force_coordinate: 1
+
+ik_failure_timeout: 0.25
+differential_ik_fallback_enabled: true
+differential_ik_damping: 0.05
+differential_ik_max_joint_step: 0.05
+differential_ik_max_translation_error: 0.08
+differential_ik_max_rotation_error: 0.15
+
+haptic_feedback_enabled: false
+haptic_only_in_contact: false
+haptic_require_teleop_active: true
+haptic_force_scale: 0.03
+haptic_force_filter_tau: 0.05
+haptic_force_deadband: 1.0
+haptic_damping_x: 0.0
+haptic_damping_y: 0.0
+haptic_damping_z: 0.0
+haptic_max_force_x: 0.5
+haptic_max_force_y: 0.5
+haptic_max_force_z: 0.5
+haptic_max_force_norm: 0.5
+haptic_force_ramp_rate: 1.0
+haptic_position_stiffness_x: 60.0
+haptic_position_stiffness_y: 60.0
+haptic_position_stiffness_z: 60.0
+haptic_position_deadband: 0.001
+haptic_max_position_error: 0.015
+haptic_force_timeout: 0.1
+haptic_max_dt: 0.05
+haptic_force_sign: [1.0, 1.0, 1.0]
+haptic_force_rotation_rpy: [0.0, 0.0, 0.0]

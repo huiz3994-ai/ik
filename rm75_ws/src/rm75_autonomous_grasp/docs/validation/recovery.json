@@ -1,0 +1,18 @@
+{
+  "mode": "recovery",
+  "injected": false,
+  "task_success": false,
+  "error": "PLAN_FAIL",
+  "cancel_latency_wall_s": null,
+  "states": [
+    "IDLE: ",
+    "WAIT_OBJECT: ",
+    "VISION_DETECT: ",
+    "POSE_ESTIMATION: ",
+    "UPDATE_OBSTACLE_MAP: ",
+    "PLAN_PATH: select feasible pregrasp",
+    "PLAN_FAIL: PLAN_FAIL"
+  ],
+  "execute_calls": 0,
+  "obstacle_source": "Gazebo RGB-D only; no CollisionObject insertion"
+}

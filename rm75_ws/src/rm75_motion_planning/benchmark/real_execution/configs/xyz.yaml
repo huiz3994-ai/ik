@@ -1,0 +1,12 @@
+# Protocol manifest; not loaded as an automatic execution loop.
+robot: RM75-6FB
+reference_frame: base_link_to_Link7
+execute: false
+attempts_per_axis: 100
+balance: 50_positive_50_negative
+translation_m: 0.010
+initial_speed_mps: 0.010
+optional_speed_mps_after_review: 0.030
+axes: [x, y, z]
+command_period_sec: 0.020
+supervision_required: true

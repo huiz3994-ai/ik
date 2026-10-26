@@ -1,0 +1,380 @@
+... logging to /root/.ros/log/153f247e-be34-11f1-b6c5-8cf8c57f097c/roslaunch-zjh-Dell-G15-5520-20776.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;/root/rm75_ws/src/rm75_autonomous_grasp/launch/sim.launch
+[1mstarted roslaunch server http://zjh-Dell-G15-5520:42683/[0m
+
+SUMMARY
+========
+
+PARAMETERS
+ * /arm/arm_joint_controller/constraints/goal_time: 3.0
+ * /arm/arm_joint_controller/constraints/joint1/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint1/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint2/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint2/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint3/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint3/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint4/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint4/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint5/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint5/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint6/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint6/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/joint7/goal: 0.02
+ * /arm/arm_joint_controller/constraints/joint7/trajectory: 0.2
+ * /arm/arm_joint_controller/constraints/stopped_velocity_tolerance: 0.05
+ * /arm/arm_joint_controller/gains/joint1/d: 0.1
+ * /arm/arm_joint_controller/gains/joint1/i: 0.0
+ * /arm/arm_joint_controller/gains/joint1/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint1/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint2/d: 0.1
+ * /arm/arm_joint_controller/gains/joint2/i: 0.0
+ * /arm/arm_joint_controller/gains/joint2/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint2/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint3/d: 0.1
+ * /arm/arm_joint_controller/gains/joint3/i: 0.0
+ * /arm/arm_joint_controller/gains/joint3/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint3/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint4/d: 0.1
+ * /arm/arm_joint_controller/gains/joint4/i: 0.0
+ * /arm/arm_joint_controller/gains/joint4/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint4/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint5/d: 0.1
+ * /arm/arm_joint_controller/gains/joint5/i: 0.0
+ * /arm/arm_joint_controller/gains/joint5/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint5/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint6/d: 0.1
+ * /arm/arm_joint_controller/gains/joint6/i: 0.0
+ * /arm/arm_joint_controller/gains/joint6/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint6/p: 1000.0
+ * /arm/arm_joint_controller/gains/joint7/d: 0.1
+ * /arm/arm_joint_controller/gains/joint7/i: 0.0
+ * /arm/arm_joint_controller/gains/joint7/i_clamp: 0.0
+ * /arm/arm_joint_controller/gains/joint7/p: 1000.0
+ * /arm/arm_joint_controller/joints: ['joint1', 'joint...
+ * /arm/arm_joint_controller/type: position_controll...
+ * /arm/joint_state_controller/publish_rate: 50
+ * /arm/joint_state_controller/type: joint_state_contr...
+ * /gazebo/enable_ros_network: True
+ * /grasp_state_machine/acceleration_scaling: 0.1
+ * /grasp_state_machine/approach_distance: 0.1
+ * /grasp_state_machine/collision_joint_step: 0.035
+ * /grasp_state_machine/execute: True
+ * /grasp_state_machine/gripper_feedback_verified: False
+ * /grasp_state_machine/gripper_force: 200
+ * /grasp_state_machine/gripper_speed: 200
+ * /grasp_state_machine/gripper_timeout: 5.0
+ * /grasp_state_machine/hand_eye_calibrated: False
+ * /grasp_state_machine/lift_distance: 0.12
+ * /grasp_state_machine/map_timeout: 2.0
+ * /grasp_state_machine/max_replans: 3
+ * /grasp_state_machine/object_size: 0.04
+ * /grasp_state_machine/object_timeout: 15.0
+ * /grasp_state_machine/optimizer: time_parameteriza...
+ * /grasp_state_machine/planner_type: RRTConnect
+ * /grasp_state_machine/planning_attempts: 3
+ * /grasp_state_machine/planning_time: 5.0
+ * /grasp_state_machine/require_map: True
+ * /grasp_state_machine/robot_padding: 0.005
+ * /grasp_state_machine/simulation: True
+ * /grasp_state_machine/stop_verified: False
+ * /grasp_state_machine/surface_to_tcp_offset: -0.02
+ * /grasp_state_machine/tool_verified: False
+ * /grasp_state_machine/velocity_scaling: 0.15
+ * /move_group/allow_trajectory_execution: True
+ * /move_group/arm/default_planner_config: RRTConnect
+ * /move_group/arm/enforce_joint_model_state_space: True
+ * /move_group/arm/longest_valid_segment_fraction: 0.0005
+ * /move_group/arm/planner_configs: ['RRTConnect', 'R...
+ * /move_group/arm/projection_evaluator: joints(joint1,joi...
+ * /move_group/controller_list: [{'name': 'arm/ar...
+ * /move_group/controller_manager_ns: controller_manager
+ * /move_group/moveit_controller_manager: moveit_simple_con...
+ * /move_group/octomap_frame: base_link
+ * /move_group/octomap_resolution: 0.02
+ * /move_group/planner_configs/EST/goal_bias: 0.1
+ * /move_group/planner_configs/EST/range: 0.2
+ * /move_group/planner_configs/EST/type: geometric::EST
+ * /move_group/planner_configs/KPIECE/border_fraction: 0.9
+ * /move_group/planner_configs/KPIECE/failed_expansion_score_factor: 0.5
+ * /move_group/planner_configs/KPIECE/goal_bias: 0.1
+ * /move_group/planner_configs/KPIECE/min_valid_path_fraction: 0.5
+ * /move_group/planner_configs/KPIECE/range: 0.2
+ * /move_group/planner_configs/KPIECE/type: geometric::KPIECE
+ * /move_group/planner_configs/PRM/max_nearest_neighbors: 10
+ * /move_group/planner_configs/PRM/type: geometric::PRM
+ * /move_group/planner_configs/RRTConnect/range: 0.2
+ * /move_group/planner_configs/RRTConnect/type: geometric::RRTCon...
+ * /move_group/planner_configs/RRTstar/delay_collision_checking: 1
+ * /move_group/planner_configs/RRTstar/goal_bias: 0.2
+ * /move_group/planner_configs/RRTstar/range: 0.2
+ * /move_group/planner_configs/RRTstar/type: geometric::RRTstar
+ * /move_group/planning_plugin: ompl_interface/OM...
+ * /move_group/planning_scene_monitor/publish_geometry_updates: True
+ * /move_group/planning_scene_monitor/publish_planning_scene: True
+ * /move_group/planning_scene_monitor/publish_state_updates: True
+ * /move_group/planning_scene_monitor/publish_transforms_updates: True
+ * /move_group/request_adapters: default_planner_r...
+ * /move_group/sensors: [{'sensor_plugin'...
+ * /move_group/trajectory_execution/allowed_execution_duration_scaling: 2.0
+ * /move_group/trajectory_execution/allowed_goal_duration_margin: 3.0
+ * /move_group/trajectory_execution/allowed_start_tolerance: 0.02
+ * /move_group/trajectory_execution/execution_duration_monitoring: True
+ * /observation_ready: False
+ * /robot_description: <?xml version="1....
+ * /robot_description_kinematics/arm/kinematics_solver: kdl_kinematics_pl...
+ * /robot_description_kinematics/arm/kinematics_solver_search_resolution: 0.005
+ * /robot_description_kinematics/arm/kinematics_solver_timeout: 0.005
+ * /robot_description_planning/joint_limits/joint1/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint1/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint1/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint1/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint2/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint2/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint2/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint2/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint3/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint3/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint3/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint3/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint4/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint4/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint4/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint4/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint5/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint5/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint5/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint5/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint6/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint6/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint6/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint6/max_velocity: 1.0
+ * /robot_description_planning/joint_limits/joint7/has_acceleration_limits: True
+ * /robot_description_planning/joint_limits/joint7/has_velocity_limits: True
+ * /robot_description_planning/joint_limits/joint7/max_acceleration: 0.5
+ * /robot_description_planning/joint_limits/joint7/max_velocity: 1.0
+ * /robot_description_semantic: <robot name="rm_7...
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+ * /scene_manager/objects: [{'id': 'table', ...
+ * /scene_manager/target/color: [1, 0, 0, 1]
+ * /scene_manager/target/id: target
+ * /scene_manager/target/size: [0.04, 0.04, 0.04]
+ * /scene_manager/target/type: box
+ * /scene_manager/target/xyz: [0.34, 0.045, 0.145]
+ * /scene_ready: False
+ * /use_sim_time: True
+ * /vision/base_frame: base_link
+ * /vision/camera_frame: camera_link
+ * /vision/detector: color
+ * /vision/max_age: 0.5
+ * /vision/tag_id: 0
+ * /vision/world_frame: world
+
+NODES
+  /
+    gazebo (gazebo_ros/gzserver)
+    grasp_state_machine (rm75_autonomous_grasp/grasp_node)
+    init_sim (rm75_autonomous_grasp/init_sim.py)
+    joint_state_relay (topic_tools/relay)
+    move_group (moveit_ros_move_group/move_group)
+    obstacle_map (rm75_autonomous_grasp/obstacle_map)
+    robot_state_publisher (robot_state_publisher/robot_state_publisher)
+    scene_manager (rm75_autonomous_grasp/scene_manager.py)
+    spawn_rm75 (gazebo_ros/spawn_model)
+    vision (rm75_vision_grasp/vision_node)
+  /arm/
+    controllers (controller_manager/spawner)
+[33m[WARN] [1790926633.649781537]: Falling back to using the move_group node's namespace (deprecated Melodic behavior).[0m
+[INFO] [1790926633.799541, 0.000000]: Loading model XML from ros parameter robot_description
+[INFO] [1790926633.802298, 0.000000]: Waiting for service /gazebo/spawn_urdf_model
+[INFO] [1790926634.406506, 0.147000]: Calling service /gazebo/spawn_urdf_model
+[INFO] [1790926634.503384, 0.175000]: Spawn status: SpawnModel: Successfully spawned entity
+[31m[ERROR] [1790926636.367515061, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint1[0m
+[31m[ERROR] [1790926636.367904931, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint2[0m
+[31m[ERROR] [1790926636.368342361, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint3[0m
+[31m[ERROR] [1790926636.368646160, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint4[0m
+[31m[ERROR] [1790926636.368850092, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint5[0m
+[31m[ERROR] [1790926636.369046315, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint6[0m
+[31m[ERROR] [1790926636.369231706, 0.175000000]: No p gain specified for pid.  Namespace: /arm/gazebo_ros_control/pid_gains/joint7[0m
+[0m[INFO] [1790926633.656927145]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1790926633.656947550]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[0m[INFO] [1790926633.865014197]: Publishing maintained planning scene on 'monitored_planning_scene'[0m
+[0m[INFO] [1790926633.866175144]: Listening to 'joint_states' for joint states[0m
+[0m[INFO] [1790926633.867507952]: Listening to '/attached_collision_object' for attached collision objects[0m
+[0m[INFO] [1790926633.867517365]: Starting planning scene monitor[0m
+[0m[INFO] [1790926633.868081450]: Listening to '/planning_scene'[0m
+[0m[INFO] [1790926633.868087876]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.[0m
+[0m[INFO] [1790926633.868643645]: Listening to '/collision_object'[0m
+[0m[INFO] [1790926633.869206936]: Listening to '/planning_scene_world' for planning scene world geometry[0m
+[0m[INFO] [1790926634.006220974]: Listening to '/mapping/cloud' using message filter with target frame 'world '[0m
+[0m[INFO] [1790926634.006245274]: Loading planning pipeline ''[0m
+[0m[INFO] [1790926634.027267123]: Using planning interface 'OMPL'[0m
+[0m[INFO] [1790926634.029125469]: Param 'default_workspace_bounds' was not set. Using default value: 10[0m
+[0m[INFO] [1790926634.029279640]: Param 'start_state_max_bounds_error' was not set. Using default value: 0.05[0m
+[0m[INFO] [1790926634.029391327]: Param 'start_state_max_dt' was not set. Using default value: 0.5[0m
+[0m[INFO] [1790926634.029495300]: Param 'start_state_max_dt' was not set. Using default value: 0.5[0m
+[0m[INFO] [1790926634.029588712]: Param 'jiggle_fraction' was not set. Using default value: 0.02[0m
+[0m[INFO] [1790926634.029683865]: Param 'max_sampling_attempts' was not set. Using default value: 100[0m
+[0m[INFO] [1790926634.029696379]: Using planning request adapter 'Add Time Parameterization'[0m
+[0m[INFO] [1790926634.029702778]: Using planning request adapter 'Fix Workspace Bounds'[0m
+[0m[INFO] [1790926634.029706526]: Using planning request adapter 'Fix Start State Bounds'[0m
+[0m[INFO] [1790926634.029710174]: Using planning request adapter 'Fix Start State In Collision'[0m
+[0m[INFO] [1790926634.029713570]: Using planning request adapter 'Fix Start State Path Constraints'[0m
+[0m[INFO] [1790926636.973869141, 0.761000000]: Added FollowJointTrajectory controller for arm/arm_joint_controller[0m
+[0m[INFO] [1790926636.974310650, 0.761000000]: Returned 1 controllers in list[0m
+[0m[INFO] [1790926637.003324198, 0.786000000]: Trajectory execution is not managing controllers[0m
+[0m[INFO] [1790926637.003351028, 0.786000000]: MoveGroup debug mode is OFF[0m
+[96mLoading 'move_group/ApplyPlanningSceneService'...
+[0m[96mLoading 'move_group/ClearOctomapService'...
+[0m[96mLoading 'move_group/MoveGroupCartesianPathService'...
+[0m[96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...
+[0m[96mLoading 'move_group/MoveGroupGetPlanningSceneService'...
+[0m[96mLoading 'move_group/MoveGroupKinematicsService'...
+[0m[96mLoading 'move_group/MoveGroupMoveAction'...
+[0m[96mLoading 'move_group/MoveGroupPickPlaceAction'...
+[0m[96mLoading 'move_group/MoveGroupPlanService'...
+[0m[96mLoading 'move_group/MoveGroupQueryPlannersService'...
+[0m[96mLoading 'move_group/MoveGroupStateValidationService'...
+[0m[0m[INFO] [1790926637.034735230, 0.819000000]: 
+
+********************************************************
+* MoveGroup using: 
+*     - ApplyPlanningSceneService
+*     - ClearOctomapService
+*     - CartesianPathService
+*     - ExecuteTrajectoryAction
+*     - GetPlanningSceneService
+*     - KinematicsService
+*     - MoveAction
+*     - PickPlaceAction
+*     - MotionPlanService
+*     - QueryPlannersService
+*     - StateValidationService
+********************************************************
+[0m
+[0m[INFO] [1790926637.035088164, 0.819000000]: MoveGroup context using planning plugin ompl_interface/OMPLPlanner[0m
+[0m[INFO] [1790926637.035113780, 0.819000000]: MoveGroup context initialization complete[0m
+[92m
+You can start planning now!
+
+[0m[INFO] [1790926650.698272, 13.967000]: Observation pose reached via MoveIt
+[0m[INFO] [1790926638.170333451]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1790926638.170677816]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[0m[INFO] [1790926639.575033635, 3.229000000]: Ready to take commands for planning group arm.[0m
+[0m[INFO] [1790926639.589987263, 3.244000000]: Combined planning and execution request received for MoveGroup action. Forwarding to planning and execution pipeline.[0m
+[0m[INFO] [1790926639.590089932, 3.244000000]: Planning attempt 1 of at most 1[0m
+[0m[INFO] [1790926639.592538528, 3.247000000]: Planner configuration 'arm' will use planner 'geometric::RRTConnect'. Additional configuration parameters will be set when the planner is constructed.[0m
+[0m[INFO] [1790926639.593148152, 3.247000000]: arm/arm: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926639.608484423, 3.262000000]: arm/arm: Created 20 states (2 start + 18 goal)[0m
+[0m[INFO] [1790926639.608621035, 3.262000000]: Solution found in 0.015598 seconds[0m
+[0m[INFO] [1790926639.644039400, 3.296000000]: SimpleSetup: Path simplification took 0.035142 seconds and changed from 19 to 2 states[0m
+[0m[INFO] [1790926650.689158921, 13.960000000]: Controller 'arm/arm_joint_controller' successfully finished[0m
+[0m[INFO] [1790926650.693896363, 13.964000000]: Completed trajectory execution with status SUCCEEDED ...[0m
+[0m[INFO] [1790926651.864041809, 15.124000000]: Planning request received for MoveGroup action. Forwarding to planning pipeline.[0m
+[0m[INFO] [1790926651.865854040, 15.126000000]: Planner configuration 'arm[RRTConnect]' will use planner 'geometric::RRTConnect'. Additional configuration parameters will be set when the planner is constructed.[0m
+[0m[INFO] [1790926651.866495648, 15.127000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926651.866533370, 15.127000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926651.866569584, 15.127000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926651.879688558, 15.141000000]: arm/arm[RRTConnect]: Created 13 states (7 start + 6 goal)[0m
+[0m[INFO] [1790926651.882551548, 15.144000000]: arm/arm[RRTConnect]: Created 14 states (6 start + 8 goal)[0m
+[0m[INFO] [1790926651.883274975, 15.144000000]: arm/arm[RRTConnect]: Created 23 states (9 start + 14 goal)[0m
+[0m[INFO] [1790926651.883362717, 15.145000000]: ParallelPlan::solve(): Solution found by one or more threads in 0.017241 seconds[0m
+[0m[INFO] [1790926651.898659158, 15.158000000]: SimpleSetup: Path simplification took 0.015220 seconds and changed from 10 to 3 states[0m
+[0m[INFO] [1790926651.935237512, 15.195000000]: Execution request received[0m
+[0m[INFO] [1790926659.324723275, 22.306000000]: Controller 'arm/arm_joint_controller' successfully finished[0m
+[0m[INFO] [1790926659.341860774, 22.324000000]: Completed trajectory execution with status SUCCEEDED ...[0m
+[0m[INFO] [1790926659.341977286, 22.324000000]: Execution completed: SUCCEEDED[0m
+[0m[INFO] [1790926659.425099061, 22.404000000]: Planning request received for MoveGroup action. Forwarding to planning pipeline.[0m
+[0m[INFO] [1790926659.426148309, 22.405000000]: Planner configuration 'arm[RRTConnect]' will use planner 'geometric::RRTConnect'. Additional configuration parameters will be set when the planner is constructed.[0m
+[0m[INFO] [1790926659.426439941, 22.406000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926659.426468569, 22.406000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926659.426500961, 22.406000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926659.438040434, 22.418000000]: arm/arm[RRTConnect]: Created 8 states (2 start + 6 goal)[0m
+[0m[INFO] [1790926659.438090213, 22.418000000]: arm/arm[RRTConnect]: Created 9 states (2 start + 7 goal)[0m
+[0m[INFO] [1790926659.438201539, 22.418000000]: arm/arm[RRTConnect]: Created 9 states (2 start + 7 goal)[0m
+[0m[INFO] [1790926659.438332561, 22.418000000]: ParallelPlan::solve(): Solution found by one or more threads in 0.012026 seconds[0m
+[0m[INFO] [1790926659.44995[0m[INFO] [1790926636.399037652, 0.197000000]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1790926636.399711185, 0.198000000]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[0m[INFO] [1790926637.895617737, 1.600000000]: Ready to take commands for planning group arm.[0m
+[0m[INFO] [1790926638.031641441, 1.736000000]: Loading robot model 'rm_75'...[0m
+[0m[INFO] [1790926638.031671537, 1.736000000]: No root/virtual joint specified in SRDF. Assuming fixed joint[0m
+[0m[INFO] [1790926638.212054760, 1.896000000]: Starting planning scene monitor[0m
+[0m[INFO] [1790926638.213112086, 1.897000000]: Listening to '/move_group/monitored_planning_scene'[0m
+[0m[INFO] [1790926638.214485058, 1.899000000]: Listening to '/attached_collision_object' for attached collision objects[0m
+[0m[INFO] [1790926638.363701104, 2.049000000]: IDLE: [0m
+[0m[INFO] [1790926651.218564114, 14.481000000]: WAIT_OBJECT: [0m
+[0m[INFO] [1790926651.218661873, 14.481000000]: VISION_DETECT: [0m
+[0m[INFO] [1790926651.218741026, 14.481000000]: POSE_ESTIMATION: [0m
+[0m[INFO] [1790926651.218773157, 14.481000000]: UPDATE_OBSTACLE_MAP: [0m
+[0m[INFO] [1790926651.831103989, 15.089000000]: PLAN_PATH: select feasible pregrasp[0m
+[0m[INFO] [1790926651.924299880, 15.183000000]: EXECUTE_TRAJECTORY: pregrasp[0m
+[0m[INFO] [1790926659.390630959, 22.370000000]: PLAN_PATH: [0m
+[0m[INFO] [1790926659.459422750, 22.441000000]: EXECUTE_TRAJECTORY: [0m
+[0m[INFO] [1790926664.841869888, 27.804000000]: GRASP: [0m
+[0m[INFO] [1790926664.845192781, 27.807000000]: LIFT: [0m
+[0m[INFO] [1790926664.845230203, 27.807000000]: PLAN_PATH: [0m
+[0m[INFO] [1790926664.927987490, 27.890000000]: EXECUTE_TRAJECTORY: [0m
+[0m[INFO] [1790926671.639851809, 34.584000000]: SUCCESS: [0m
+7968, 22.431000000]: SimpleSetup: Path simplification took 0.011571 seconds and changed from 7 to 2 states[0m
+[0m[INFO] [1790926659.469683961, 22.451000000]: Execution request received[0m
+[0m[INFO] [1790926664.809292084, 27.770000000]: Controller 'arm/arm_joint_controller' successfully finished[0m
+[0m[INFO] [1790926664.822740956, 27.784000000]: Completed trajectory execution with status SUCCEEDED ...[0m
+[0m[INFO] [1790926664.822820588, 27.784000000]: Execution completed: SUCCEEDED[0m
+[0m[INFO] [1790926664.881453641, 27.844000000]: Planning request received for MoveGroup action. Forwarding to planning pipeline.[0m
+[0m[INFO] [1790926664.882513287, 27.846000000]: Planner configuration 'arm[RRTConnect]' will use planner 'geometric::RRTConnect'. Additional configuration parameters will be set when the planner is constructed.[0m
+[0m[INFO] [1790926664.882770980, 27.846000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926664.882800482, 27.846000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926664.882828090, 27.846000000]: arm/arm[RRTConnect]: Starting planning with 1 states already in datastructure[0m
+[0m[INFO] [1790926664.904000405, 27.867000000]: arm/arm[RRTConnect]: Created 10 states (2 start + 8 goal)[0m
+[0m[INFO] [1790926664.904740892, 27.868000000]: arm/arm[RRTConnect]: Created 10 states (8 start + 2 goal)[0m
+[0m[INFO] [1790926664.905094725, 27.868000000]: arm/arm[RRTConnect]: Created 11 states (2 start + 9 goal)[0m
+[0m[INFO] [1790926664.905147756, 27.868000000]: ParallelPlan::solve(): Solution found by one or more threads in 0.022535 seconds[0m
+[0m[INFO] [1790926664.915618846, 27.877000000]: SimpleSetup: Path simplification took 0.010415 seconds and changed from 9 to 2 states[0m
+[0m[INFO] [1790926664.950572527, 27.913000000]: Execution request received[0m
+[0m[INFO] [1790926671.530101656, 34.475000000]: Controller 'arm/arm_joint_controller' successfully finished[0m
+[0m[INFO] [1790926671.539030610, 34.484000000]: Completed trajectory execution with status SUCCEEDED ...[0m
+[0m[INFO] [1790926671.539103833, 34.484000000]: Execution completed: SUCCEEDED[0m
+[INFO] [1790926638.075988, 1.760000]: Scene loaded: shared Gazebo/MoveIt geometry; target pose is not sent to perception
+[WARN] [1790926706.784500, 53.923000]: Controller Spawner error while taking down controllers: transport error completing service call: unable to receive data from sender, check sender's logs for details
+[31m[arm/controllers-5] escalating to SIGTERM[0m
+[31m[gazebo-3] escalating to SIGTERM[0m
+
+auto-starting new master
+[1mprocess[master]: started with pid [20818][0m
+[1mROS_MASTER_URI=http://localhost:11311[0m
+]2;/root/rm75_ws/src/rm75_autonomous_grasp/launch/sim.launch http://localhost:11311
+[1msetting /run_id to 153f247e-be34-11f1-b6c5-8cf8c57f097c[0m
+[1mprocess[rosout-1]: started with pid [20828][0m
+started core service [/rosout]
+[1mprocess[init_sim-2]: started with pid [20839][0m
+[1mprocess[gazebo-3]: started with pid [20840][0m
+[1mprocess[spawn_rm75-4]: started with pid [20843][0m
+[1mprocess[arm/controllers-5]: started with pid [20846][0m
+[1mprocess[robot_state_publisher-6]: started with pid [20847][0m
+[1mprocess[joint_state_relay-7]: started with pid [20848][0m
+[1mprocess[move_group-8]: started with pid [20849][0m
+[1mprocess[scene_manager-9]: started with pid [20858][0m
+[1mprocess[vision-10]: started with pid [20861][0m
+[1mprocess[obstacle_map-11]: started with pid [20863][0m
+[1mprocess[grasp_state_machine-12]: started with pid [20864][0m
+[1m[spawn_rm75-4] process has finished cleanly
+log file: /root/.ros/log/153f247e-be34-11f1-b6c5-8cf8c57f097c/spawn_rm75-4*.log[0m
+[1m[init_sim-2] process has finished cleanly
+log file: /root/.ros/log/153f247e-be34-11f1-b6c5-8cf8c57f097c/init_sim-2*.log[0m
+[grasp_state_machine-12] killing on exit
+[obstacle_map-11] killing on exit
+[vision-10] killing on exit
+[scene_manager-9] killing on exit
+[move_group-8] killing on exit
+[joint_state_relay-7] killing on exit
+[robot_state_publisher-6] killing on exit
+[arm/controllers-5] killing on exit
+[gazebo-3] killing on exit
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m

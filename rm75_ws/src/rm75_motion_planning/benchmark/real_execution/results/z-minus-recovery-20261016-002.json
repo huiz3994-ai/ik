@@ -1,0 +1,13 @@
+{
+  "data_source": "real_robot",
+  "reference_frame": "base_link_to_Link7",
+  "run_id": "z-minus-recovery-20261016-002",
+  "scenario": "z",
+  "status": "PASS",
+  "samples": 464,
+  "final_position_error_m": 0.0007410664421912777,
+  "final_orientation_error_rad": 0.00083048055193436006,
+  "stop_latency_sec": null,
+  "stop_distance_max_joint_rad": null,
+  "stop_reason": ""
+}

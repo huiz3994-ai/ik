@@ -1,0 +1,90 @@
+# Low-force hybrid-control commissioning configuration. The launch entry
+# decides whether robot motion is enabled and overrides motion_enabled below.
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+use_touch_increment: true
+metres_per_touch_unit: 0.001
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+position_scale: 0.6
+orientation_enabled: true
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.08
+max_joint_velocity: 0.30
+force_topic: /rm_driver/UdpSixZeroForce
+hybrid_control_enabled: true
+desired_force: -10.0
+contact_threshold: 3.0
+release_threshold: 1.0
+force_gain: 0.0002
+force_limit: 20.0
+max_external_force: 20.0
+max_external_torque: 2.0
+force_safety_enabled: true
+require_force_feedback: true
+force_feedback_timeout: 0.25
+# RM controllers can emit a short invalid/over-limit wrench burst while the
+# UDP stream and compensation state settle.  Engagement still checks the
+# current wrench, and any over-limit sample while active stops immediately.
+force_startup_grace_period: 5.0
+max_z_velocity: 0.002
+max_z_step: 4.0e-05
+max_force_travel: 0.01
+max_z_tracking_error: 0.005
+max_joint_tracking_error: 0.15
+force_deadband: 1.0
+force_filter_tau: 0.03
+contact_debounce: 0.06
+force_ramp_rate: 2.0
+force_motion_sign: 1.0
+force_sign: -1.0
+force_frame: base_link
+force_frame_rotation_rpy:
+- 0.0
+- 0.0
+- 0.0
+ik_failure_timeout: 0.25
+differential_ik_fallback_enabled: true
+differential_ik_damping: 0.05
+differential_ik_max_joint_step: 0.05
+differential_ik_max_translation_error: 0.08
+differential_ik_max_rotation_error: 0.15
+require_touch_increment: true
+# Verified on 2026-10-04 with a base +Z load (raw World Fz positive).
+force_frame_verified: true
+expected_force_coordinate: 1
+
+# The contact/active haptic gates are deliberately bypassed so that slave-side
+# force remains perceptible while the operator is positioning the Touch. Haptic
+# output is still OFF unless explicitly enabled at launch.
+haptic_feedback_enabled: false
+haptic_only_in_contact: false
+haptic_require_teleop_active: true
+haptic_force_scale: 0.03
+haptic_force_filter_tau: 0.05
+haptic_force_deadband: 1.0
+haptic_damping_x: 0.0
+haptic_damping_y: 0.0
+haptic_damping_z: 0.0
+haptic_max_force_x: 0.5
+haptic_max_force_y: 0.5
+haptic_max_force_z: 0.5
+haptic_max_force_norm: 0.5
+haptic_force_ramp_rate: 1.0
+haptic_position_stiffness_x: 40.0
+haptic_position_stiffness_y: 40.0
+haptic_position_stiffness_z: 40.0
+haptic_position_deadband: 0.001
+haptic_max_position_error: 0.015
+haptic_force_timeout: 0.1
+haptic_max_dt: 0.05
+haptic_force_sign: [1.0, 1.0, 1.0]
+haptic_force_rotation_rpy: [0.0, 0.0, 0.0]

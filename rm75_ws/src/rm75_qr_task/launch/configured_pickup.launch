@@ -1,0 +1,25 @@
+<launch>
+  <!-- Absolute base_link pickup poses need MoveIt and the trajectory bridge,
+       but do not need an RGB camera, marker detector, or hand-eye TF. -->
+  <arg name="execution_authorized" default="false"/>
+  <arg name="trajectory_execution_authorized" default="false"/>
+  <arg name="tool_voltage_authorized" default="false"/>
+  <arg name="supervised_commissioning_authorized" default="false"/>
+  <arg name="target_config" default="$(find rm75_qr_task)/config/single_marker_five_targets.yaml"/>
+  <arg name="calibration_file" default="/root/.ros/rm75_qr_task/single_marker_five_targets.yaml"/>
+  <arg name="tool_config" default="$(find rm75_sampling_gui)/config/tools.yaml"/>
+
+  <node pkg="rm75_qr_task" type="five_target_server.py"
+        name="rm75_five_target_server" output="screen">
+    <param name="target_config" value="$(arg target_config)"/>
+    <param name="calibration_file" value="$(arg calibration_file)"/>
+    <param name="tool_config" value="$(arg tool_config)"/>
+    <param name="execution_authorized" value="$(arg execution_authorized)"/>
+    <param name="trajectory_execution_authorized"
+           value="$(arg trajectory_execution_authorized)"/>
+    <param name="tool_voltage_authorized"
+           value="$(arg tool_voltage_authorized)"/>
+    <param name="supervised_commissioning_authorized"
+           value="$(arg supervised_commissioning_authorized)"/>
+  </node>
+</launch>

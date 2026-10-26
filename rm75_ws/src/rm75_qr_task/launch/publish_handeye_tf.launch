@@ -1,0 +1,15 @@
+<launch>
+  <!-- Start only when no URDF/easy_handeye publisher already owns camera_link. -->
+  <arg name="parent_frame" default="Link7"/>
+  <arg name="child_frame" default="camera_link"/>
+  <arg name="x" default="0.02418851387922378"/>
+  <arg name="y" default="0.09074710310769298"/>
+  <arg name="z" default="0.025447015109483433"/>
+  <arg name="qx" default="-0.49047045364387526"/>
+  <arg name="qy" default="-0.5138488336139114"/>
+  <arg name="qz" default="-0.49518343803705034"/>
+  <arg name="qw" default="0.5001914363419274"/>
+  <node pkg="tf2_ros" type="static_transform_publisher"
+        name="rm75_qr_handeye_tf"
+        args="$(arg x) $(arg y) $(arg z) $(arg qx) $(arg qy) $(arg qz) $(arg qw) $(arg parent_frame) $(arg child_frame)"/>
+</launch>

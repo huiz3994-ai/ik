@@ -1,0 +1,5 @@
+<launch>
+ <!-- ROS1 realsense-ros driver required; this package intentionally does not install a ROS2 driver. -->
+ <include file="$(find realsense2_camera)/launch/rs_camera.launch"><arg name="align_depth" value="true"/><arg name="filters" value="pointcloud"/><arg name="publish_tf" value="true"/></include>
+ <!-- driver owns internal optical TF; calibrated URDF owns Link7 -> camera_link only -->
+</launch>

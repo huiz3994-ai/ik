@@ -1,0 +1,16 @@
+<launch>
+  <arg name="enable_motion" default="false"/>
+  <arg name="haptic_feedback" default="false"/>
+  <arg name="config" default="$(find rm75_touch_teleop)/config/rm75_touch_sampling_real.yaml"/>
+  <arg name="udp_force_coordinate" default="1"/>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <include file="$(find rm75_touch_teleop)/launch/real_touch_6f.launch">
+    <arg name="config" value="$(arg config)"/>
+    <arg name="enable_motion" value="$(arg enable_motion)"/>
+    <arg name="udp_force_coordinate" value="$(arg udp_force_coordinate)"/>
+    <arg name="start_touch_driver" value="$(arg start_touch_driver)"/>
+    <arg name="start_touch_helpers" value="$(arg start_touch_helpers)"/>
+    <arg name="haptic_feedback" value="$(arg haptic_feedback)"/>
+  </include>
+</launch>

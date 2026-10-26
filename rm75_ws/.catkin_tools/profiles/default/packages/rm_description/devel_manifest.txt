@@ -1,0 +1,4 @@
+rm_robot/rm_description
+/root/rm75_ws/devel/.private/rm_description/lib/pkgconfig/rm_description.pc /root/rm75_ws/devel/lib/pkgconfig/rm_description.pc
+/root/rm75_ws/devel/.private/rm_description/share/rm_description/cmake/rm_descriptionConfig.cmake /root/rm75_ws/devel/share/rm_description/cmake/rm_descriptionConfig.cmake
+/root/rm75_ws/devel/.private/rm_description/share/rm_description/cmake/rm_descriptionConfig-version.cmake /root/rm75_ws/devel/share/rm_description/cmake/rm_descriptionConfig-version.cmake

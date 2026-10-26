@@ -1,0 +1,4 @@
+geomagic_description
+/root/rm75_ws/devel/.private/geomagic_description/lib/pkgconfig/geomagic_description.pc /root/rm75_ws/devel/lib/pkgconfig/geomagic_description.pc
+/root/rm75_ws/devel/.private/geomagic_description/share/geomagic_description/cmake/geomagic_descriptionConfig-version.cmake /root/rm75_ws/devel/share/geomagic_description/cmake/geomagic_descriptionConfig-version.cmake
+/root/rm75_ws/devel/.private/geomagic_description/share/geomagic_description/cmake/geomagic_descriptionConfig.cmake /root/rm75_ws/devel/share/geomagic_description/cmake/geomagic_descriptionConfig.cmake

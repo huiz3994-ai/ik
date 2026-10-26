@@ -1,0 +1,11 @@
+# Filled only by analyze_characterization.py from supervised PASS data.
+calibration_status: pending_real_data
+normal_pass_runs: 0
+normal_coverage_complete: false
+max_tracking_error_warning_rad: null
+max_tracking_error_stop_rad: null
+feedback_timeout_stop_sec: null
+force_warning_n: null
+force_stop_n: null
+torque_warning_nm: null
+torque_stop_nm: null

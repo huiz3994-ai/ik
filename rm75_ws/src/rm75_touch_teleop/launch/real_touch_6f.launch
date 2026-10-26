@@ -1,0 +1,58 @@
+<launch>
+  <!-- Do not inherit a stale Gazebo clock setting from a shared master. -->
+  <param name="/use_sim_time" value="false"/>
+  <!-- This installation reports RM75-6FB.  The legacy filename is retained
+       for compatibility, but this launch intentionally has no 6F fallback. -->
+  <arg name="arm_ip" default="192.168.1.18"/>
+  <arg name="arm_port" default="8080"/>
+  <arg name="udp_ip" default="192.168.1.100"/>
+  <arg name="udp_port" default="8089"/>
+  <arg name="udp_cycle" default="5"/>
+  <!-- 1 = current work frame. The controller's World frame was verified as
+       identity on this installation. -->
+  <arg name="udp_force_coordinate" default="1"/>
+  <arg name="is_4th_gen" default="true"/>
+  <arg name="follow" default="false"/>
+  <arg name="trajectory_mode" default="0"/>
+  <arg name="radio" default="0"/>
+
+  <arg name="start_driver" default="true"/>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <arg name="device_name" default="Default Device"/>
+  <arg name="enable_motion" default="false"/>
+  <arg name="haptic_feedback" default="false"/>
+  <arg name="config" default="$(find rm75_touch_teleop)/config/rm75_touch_real_6f.yaml"/>
+
+  <!-- Load the confirmed 6FB kinematic model before any command publisher. -->
+  <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" output="screen"/>
+
+  <include if="$(arg start_driver)" file="$(find rm_driver)/launch/rm_75_driver.launch">
+    <arg name="Arm_IP" value="$(arg arm_ip)"/>
+    <arg name="Arm_Port" value="$(arg arm_port)"/>
+    <arg name="Arm_Dof" value="7"/>
+    <arg name="Arm_Type" value="RM75"/>
+    <arg name="Udp_IP" value="$(arg udp_ip)"/>
+    <arg name="Udp_Port" value="$(arg udp_port)"/>
+    <arg name="Udp_cycle" value="$(arg udp_cycle)"/>
+    <arg name="Udp_force_coordinate" value="$(arg udp_force_coordinate)"/>
+    <arg name="Follow" value="$(arg follow)"/>
+    <arg name="trajectory_mode" value="$(arg trajectory_mode)"/>
+    <arg name="radio" value="$(arg radio)"/>
+    <arg name="is_4th_Gen" value="$(arg is_4th_gen)"/>
+  </include>
+
+  <include file="$(find rm75_touch_teleop)/launch/teleop.launch">
+    <arg name="start_touch_driver" value="$(arg start_touch_driver)"/>
+    <arg name="start_touch_helpers" value="$(arg start_touch_helpers)"/>
+    <arg name="device_name" value="$(arg device_name)"/>
+    <arg name="config" value="$(arg config)"/>
+    <arg name="motion_enabled" value="$(arg enable_motion)"/>
+    <arg name="haptic_feedback" value="$(arg haptic_feedback)"/>
+  </include>
+</launch>

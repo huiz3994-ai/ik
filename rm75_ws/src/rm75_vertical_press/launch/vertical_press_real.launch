@@ -1,0 +1,84 @@
+<launch>
+  <param name="/use_sim_time" value="false"/>
+
+  <arg name="arm_ip" default="192.168.1.18"/>
+  <arg name="arm_port" default="8080"/>
+  <arg name="udp_ip" default="192.168.1.100"/>
+  <arg name="udp_port" default="8089"/>
+  <arg name="udp_cycle" default="5"/>
+  <arg name="udp_force_coordinate" default="1"/>
+  <arg name="is_4th_gen" default="true"/>
+  <arg name="follow" default="false"/>
+  <arg name="trajectory_mode" default="0"/>
+  <arg name="radio" default="0"/>
+
+  <arg name="start_driver" default="true"/>
+  <arg name="start_robot_state_publisher" default="true"/>
+  <arg name="start_touch_driver" default="true"/>
+  <arg name="start_touch_helpers" default="true"/>
+  <arg name="device_name" default="Default Device"/>
+  <arg name="enable_motion" default="false"/>
+  <arg name="touch_joy_topic" default="/Geomagic/joy"/>
+  <arg name="direct_press_speed" default="0.050"/>
+  <arg name="max_joint_velocity" default="1.20"/>
+  <arg name="tool5_drill_enabled" default="false"/>
+  <arg name="tool5_drill_max_feed_travel" default="0.05"/>
+  <arg name="desired_force" default="-50.0"/>
+  <arg name="max_z_velocity" default="0.005"/>
+  <arg name="force_limit" default="100.0"/>
+  <arg name="max_external_force" default="100.0"/>
+  <arg name="max_external_torque" default="5.0"/>
+  <arg name="config"
+       default="$(find rm75_vertical_press)/config/rm75_vertical_press_real.yaml"/>
+
+  <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+  <node if="$(arg start_robot_state_publisher)"
+        name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" output="screen"/>
+
+  <include if="$(arg start_driver)" file="$(find rm_driver)/launch/rm_75_driver.launch">
+    <arg name="Arm_IP" value="$(arg arm_ip)"/>
+    <arg name="Arm_Port" value="$(arg arm_port)"/>
+    <arg name="Arm_Dof" value="7"/>
+    <arg name="Arm_Type" value="RM75"/>
+    <arg name="Udp_IP" value="$(arg udp_ip)"/>
+    <arg name="Udp_Port" value="$(arg udp_port)"/>
+    <arg name="Udp_cycle" value="$(arg udp_cycle)"/>
+    <arg name="Udp_force_coordinate" value="$(arg udp_force_coordinate)"/>
+    <arg name="Follow" value="$(arg follow)"/>
+    <arg name="trajectory_mode" value="$(arg trajectory_mode)"/>
+    <arg name="radio" value="$(arg radio)"/>
+    <arg name="is_4th_Gen" value="$(arg is_4th_gen)"/>
+  </include>
+
+  <group ns="Geomagic" if="$(arg start_touch_driver)">
+    <node pkg="geomagic_control" type="device_node" name="Geomagic"
+          output="screen" required="true">
+      <param name="device_name" value="$(arg device_name)"/>
+    </node>
+  </group>
+  <node if="$(arg start_touch_helpers)" pkg="geomagic_myhaptics"
+        type="pubforce" name="touch_pubforce" output="screen"/>
+  <node if="$(arg start_touch_helpers)" pkg="rm75_touch_examples"
+        type="rm75_get_end_effector_pose" name="rm75_get_end_effector_pose"
+        output="screen"/>
+
+  <node pkg="rm75_vertical_press" type="rm75_vertical_press_node"
+        name="rm75_vertical_press" output="screen" required="true">
+    <rosparam command="load" file="$(arg config)"/>
+    <param name="motion_enabled" value="$(arg enable_motion)"/>
+    <param name="touch_joy_topic" value="$(arg touch_joy_topic)"/>
+    <param name="direct_press_speed" value="$(arg direct_press_speed)"/>
+    <param name="max_joint_velocity" value="$(arg max_joint_velocity)"/>
+    <param name="tool5_drill_enabled" value="$(arg tool5_drill_enabled)"/>
+    <param name="tool5_drill_max_feed_travel" value="$(arg tool5_drill_max_feed_travel)"/>
+    <param name="desired_force" value="$(arg desired_force)"/>
+    <param name="max_z_velocity" value="$(arg max_z_velocity)"/>
+    <param name="force_limit" value="$(arg force_limit)"/>
+    <param name="max_external_force" value="$(arg max_external_force)"/>
+    <param name="max_external_torque" value="$(arg max_external_torque)"/>
+  </node>
+</launch>

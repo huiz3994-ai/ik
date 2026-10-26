@@ -1,0 +1,104 @@
+# Web-operated, supervised RM75-6FB Z-only hybrid force/position control.
+#
+# Motion contract:
+#   * Touch grey button commands robot Z only while in POSITION_MODE.
+#   * X, Y, and the complete end-effector orientation are held at engagement.
+#   * After contact debounce, the Z force loop owns robot Z.
+#   * The measured slave force is reflected to the Geomagic Touch.
+#
+# The Web launch still overrides motion_enabled and haptic_feedback_enabled;
+# both remain fail-closed in this file.
+planning_group: arm
+tip_link: Link7
+base_frame: base_link
+touch_pose_topic: /Geomagic/pose_raw
+touch_joy_topic: /Geomagic/joy
+joint_state_topic: /joint_states
+use_touch_increment: true
+metres_per_touch_unit: 0.001
+
+output_mode: rm_joint_pos
+command_topic: /rm_driver/JointPos
+motion_enabled: false
+
+position_scale: 0.6
+translation_x_enabled: false
+translation_y_enabled: false
+translation_z_enabled: true
+orientation_enabled: false
+publish_rate: 50.0
+ik_timeout: 0.015
+command_duration: 0.1
+input_timeout: 0.25
+max_touch_translation: 0.03
+# Absolute Z envelope for the complete Web control-node lifetime.  Releasing
+# and re-pressing the grey clutch must not reset this bound.
+max_z_position_travel: 0.01
+max_joint_velocity: 0.30
+
+force_topic: /rm_driver/UdpSixZeroForce
+hybrid_control_enabled: true
+desired_force: -10.0
+contact_threshold: 3.0
+release_threshold: 1.0
+force_gain: 0.0002
+force_limit: 20.0
+max_external_force: 20.0
+max_external_torque: 2.0
+force_safety_enabled: true
+require_force_feedback: true
+force_feedback_timeout: 0.25
+force_startup_grace_period: 5.0
+max_z_velocity: 0.002
+max_z_step: 4.0e-05
+max_force_travel: 0.01
+max_z_tracking_error: 0.005
+max_joint_tracking_error: 0.15
+force_deadband: 1.0
+force_filter_tau: 0.03
+contact_debounce: 0.06
+force_ramp_rate: 2.0
+force_motion_sign: 1.0
+force_sign: -1.0
+force_frame: base_link
+force_frame_rotation_rpy: [0.0, 0.0, 0.0]
+ik_failure_timeout: 0.25
+differential_ik_fallback_enabled: true
+differential_ik_damping: 0.05
+differential_ik_max_joint_step: 0.05
+differential_ik_max_translation_error: 0.03
+differential_ik_max_rotation_error: 0.15
+require_touch_increment: true
+force_frame_verified: true
+expected_force_coordinate: 1
+
+# Haptic rendering stays fail-closed unless the dedicated Web command passes
+# haptic_feedback:=true. Feedback is limited to the commissioned 0.5 N vector.
+haptic_feedback_enabled: false
+haptic_only_in_contact: false
+haptic_require_teleop_active: true
+# Robot Z maps to Touch Y.  Suppress lateral force-sensor bias on the two
+# unused handle axes for this single-axis control contract.
+haptic_output_x_enabled: false
+haptic_output_y_enabled: true
+haptic_output_z_enabled: false
+haptic_force_scale: 0.03
+haptic_force_filter_tau: 0.05
+haptic_force_deadband: 1.0
+haptic_damping_x: 0.0
+haptic_damping_y: 0.0
+haptic_damping_z: 0.0
+haptic_max_force_x: 0.5
+haptic_max_force_y: 0.5
+haptic_max_force_z: 0.5
+haptic_max_force_norm: 0.5
+haptic_force_ramp_rate: 1.0
+haptic_position_stiffness_x: 0.0
+haptic_position_stiffness_y: 0.0
+haptic_position_stiffness_z: 40.0
+haptic_position_deadband: 0.001
+haptic_max_position_error: 0.01
+haptic_force_timeout: 0.1
+haptic_max_dt: 0.05
+haptic_force_sign: [1.0, 1.0, 1.0]
+haptic_force_rotation_rpy: [0.0, 0.0, 0.0]

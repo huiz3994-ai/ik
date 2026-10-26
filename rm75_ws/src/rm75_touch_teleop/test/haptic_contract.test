@@ -1,0 +1,40 @@
+<launch>
+  <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="link7_type" value="Link7_6fb"/>
+  </include>
+  <node pkg="rm75_touch_teleop" type="rm75_touch_teleop_node"
+        name="haptic_contract" output="screen">
+    <param name="output_mode" value="rm_joint_pos"/>
+    <param name="command_topic" value="/test/haptic/robot_command"/>
+    <param name="motion_enabled" value="false"/>
+    <param name="hybrid_control_enabled" value="false"/>
+    <param name="force_safety_enabled" value="false"/>
+    <param name="force_frame_verified" value="true"/>
+    <param name="force_frame" value="base_link"/>
+    <param name="force_topic" value="/test/haptic/force"/>
+    <param name="joint_state_topic" value="/test/haptic/joints"/>
+    <param name="touch_pose_topic" value="/test/haptic/pose"/>
+    <param name="touch_joy_topic" value="/test/haptic/joy"/>
+    <param name="touch_twist_topic" value="/test/haptic/twist"/>
+    <param name="publish_rate" value="50.0"/>
+    <param name="input_timeout" value="0.25"/>
+    <param name="haptic_feedback_enabled" value="true"/>
+    <param name="haptic_only_in_contact" value="false"/>
+    <param name="haptic_require_teleop_active" value="false"/>
+    <param name="haptic_force_timeout" value="0.1"/>
+    <param name="haptic_force_filter_tau" value="0.0"/>
+    <param name="haptic_force_deadband" value="0.0"/>
+    <param name="haptic_force_scale" value="0.01"/>
+    <param name="haptic_max_force_x" value="0.2"/>
+    <param name="haptic_max_force_y" value="0.2"/>
+    <param name="haptic_max_force_z" value="0.2"/>
+    <param name="haptic_max_force_norm" value="0.2"/>
+    <param name="haptic_force_ramp_rate" value="1.0"/>
+    <rosparam param="haptic_force_sign">[1.0, 1.0, 1.0]</rosparam>
+    <rosparam param="haptic_force_rotation_rpy">[0.0, 0.0, 0.0]</rosparam>
+    <remap from="/rm_driver/Emergency_Stop" to="/test/haptic/stop"/>
+  </node>
+  <test test-name="haptic_contract_test" pkg="rm75_touch_teleop"
+        type="haptic_contract_test.py" time-limit="30"/>
+</launch>

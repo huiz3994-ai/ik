@@ -1,0 +1,7 @@
+<launch>
+  <include file="$(find geomagic_control)/launch/geomagic_headless.launch" />
+  <!-- rviz just lets you see the end result :) -->
+  <!-- 可以注释掉下一行，避免启动RVIZ -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find geomagic_control)/cfg/geomagic.rviz" required="true" />
+</launch>
+

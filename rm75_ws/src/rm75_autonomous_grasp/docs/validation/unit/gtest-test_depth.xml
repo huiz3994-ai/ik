@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="6" failures="0" disabled="0" errors="0" time="0.004" timestamp="2026-10-02T15:35:57" name="AllTests">
+  <testsuite name="Depth" tests="4" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-02T15:35:57">
+    <testcase name="MillimeterMeterEquivalence" status="run" result="completed" time="0" timestamp="2026-10-02T15:35:57" classname="Depth" />
+    <testcase name="RejectInvalid" status="run" result="completed" time="0" timestamp="2026-10-02T15:35:57" classname="Depth" />
+    <testcase name="RejectPixelAndIntrinsicsNaN" status="run" result="completed" time="0" timestamp="2026-10-02T15:35:57" classname="Depth" />
+    <testcase name="CompensateRawColorDistortion" status="run" result="completed" time="0" timestamp="2026-10-02T15:35:57" classname="Depth" />
+  </testsuite>
+  <testsuite name="Detector" tests="2" failures="0" disabled="0" errors="0" time="0.004" timestamp="2026-10-02T15:35:57">
+    <testcase name="RedCentroid" status="run" result="completed" time="0.001" timestamp="2026-10-02T15:35:57" classname="Detector" />
+    <testcase name="AprilTagIdentity" status="run" result="completed" time="0.003" timestamp="2026-10-02T15:35:57" classname="Detector" />
+  </testsuite>
+</testsuites>

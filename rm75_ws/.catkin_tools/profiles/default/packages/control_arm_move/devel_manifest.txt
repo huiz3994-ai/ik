@@ -1,0 +1,5 @@
+rm_robot/rm_arm_examples/control_arm_move
+/root/rm75_ws/devel/.private/control_arm_move/lib/pkgconfig/control_arm_move.pc /root/rm75_ws/devel/lib/pkgconfig/control_arm_move.pc
+/root/rm75_ws/devel/.private/control_arm_move/lib/control_arm_move/api_Control_Arm_Move_demo /root/rm75_ws/devel/lib/control_arm_move/api_Control_Arm_Move_demo
+/root/rm75_ws/devel/.private/control_arm_move/share/control_arm_move/cmake/control_arm_moveConfig-version.cmake /root/rm75_ws/devel/share/control_arm_move/cmake/control_arm_moveConfig-version.cmake
+/root/rm75_ws/devel/.private/control_arm_move/share/control_arm_move/cmake/control_arm_moveConfig.cmake /root/rm75_ws/devel/share/control_arm_move/cmake/control_arm_moveConfig.cmake

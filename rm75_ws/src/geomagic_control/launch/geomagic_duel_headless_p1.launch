@@ -1,0 +1,42 @@
+<launch>
+  <!-- 设备与命名空间 -->
+  <arg name="device1_name" default="Default Device"/>
+  <!-- <arg name="device2_name" default="Touch108"/> -->
+  <arg name="prefix1"     default="touch1"/>
+  <!-- <arg name="prefix2"     default="touch2"/> -->
+
+  <!-- 发布频率 -->
+  <param name="publish_rate" type="int" value="1000"/>
+
+  <!-- 第 1 台 Touch -->
+  <group ns="$(arg prefix1)">
+    <!-- 启动驱动节点 -->
+    <node name="device_node" pkg="geomagic_control" type="device_node" output="screen">
+      <!-- 私有参数 device_name 一定要在 ~ 命名空间下 -->
+      <param name="device_name" value="$(arg device1_name)"/>
+      <!-- publish_rate 也可写在这里，或者用上面统一的 param -->
+    </node>
+    <!-- URDF 发布 -->
+    <param name="$(arg prefix1)_robot_description"
+           command="cat $(find geomagic_description)/urdf/geomagic.urdf"/>
+    <node name="robot_state_publisher"
+          pkg="robot_state_publisher"
+          type="robot_state_publisher">
+      <remap from="robot_description" to="$(arg prefix1)_robot_description"/>
+    </node>
+  </group>
+
+  <!-- 第 2 台 Touch -->
+  <!-- <group ns="$(arg prefix2)">
+    <node name="device_node" pkg="geomagic_control" type="device_node" output="screen">
+      <param name="device_name" value="$(arg device2_name)"/>
+    </node>
+    <param name="$(arg prefix2)_robot_description"
+           command="cat $(find geomagic_description)/urdf/geomagic.urdf"/>
+    <node name="robot_state_publisher"
+          pkg="robot_state_publisher"
+          type="robot_state_publisher">
+      <remap from="robot_description" to="$(arg prefix2)_robot_description"/>
+    </node>
+  </group> -->
+</launch>

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="namespace_prefix" default="rm75_d435i"/>
+  <arg name="robot_effector_frame" default="Link7"/>
+  <arg name="tracking_base_frame" default="camera_link"/>
+
+  <include file="$(find easy_handeye)/launch/publish.launch">
+    <arg name="namespace_prefix" value="$(arg namespace_prefix)"/>
+    <arg name="eye_on_hand" value="true"/>
+    <arg name="robot_effector_frame" value="$(arg robot_effector_frame)"/>
+    <arg name="tracking_base_frame" value="$(arg tracking_base_frame)"/>
+  </include>
+</launch>

@@ -1,0 +1,24 @@
+/robot_state_publisher
+/trajectory_bridge
+/move_group
+/vision
+/obstacle_map
+/grasp_state_machine
+robot name is: rm_75
+---------- Successfully Parsed XML ---------------
+root Link: world has 1 child(ren)
+    child(1):  dummy
+        child(1):  base_link
+            child(1):  bottom_link
+            child(2):  Link1
+                child(1):  Link2
+                    child(1):  Link3
+                        child(1):  Link4
+                            child(1):  Link5
+                                child(1):  Link6
+                                    child(1):  Link7
+                                        child(1):  camera_link
+                                        child(2):  gripper_body
+                                        child(3):  left_finger
+                                        child(4):  right_finger
+                                        child(5):  grasp_tcp

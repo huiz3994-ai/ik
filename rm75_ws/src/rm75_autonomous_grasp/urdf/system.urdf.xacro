@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<robot name="rm_75" xmlns:xacro="http://www.ros.org/wiki/xacro">
+ <material name="Brown"><color rgba="0.4 0.25 0.1 1"/></material>
+ <xacro:arg name="simulation" default="true"/>
+ <xacro:arg name="camera_xyz" default="-0.06 0 0.02"/><xacro:arg name="camera_rpy" default="0 -1.57079632679 0"/>
+ <xacro:arg name="tcp_xyz" default="0 0 0.10"/>
+ <!-- The connected controller identifies this arm as RM75-6FB.  Keep the
+      vendor selector explicit because its generic default is not the 6FB
+      flange geometry. -->
+ <xacro:include filename="$(find rm_description)/urdf/RM75_6FB/rm_75_6fb_description.urdf.xacro"/>
+ <link name="world"/><joint name="world_anchor" type="fixed"><parent link="world"/><child link="dummy"/></joint>
+ <xacro:macro name="box_link" params="name parent xyz size mass">
+  <link name="${name}"><inertial><mass value="${mass}"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial><visual><geometry><box size="${size}"/></geometry></visual><collision><geometry><box size="${size}"/></geometry></collision></link>
+  <joint name="${name}_joint" type="fixed"><parent link="${parent}"/><child link="${name}"/><origin xyz="${xyz}"/></joint>
+ </xacro:macro>
+ <!-- Test fixture dimensions. Replace with measured physical tool before real execution. -->
+ <xacro:box_link name="gripper_body" parent="Link7" xyz="0 0 0.035" size="0.07 0.07 0.05" mass="0.3"/>
+ <xacro:box_link name="left_finger" parent="Link7" xyz="0 0.034 0.082" size="0.018 0.012 0.055" mass="0.03"/>
+ <xacro:box_link name="right_finger" parent="Link7" xyz="0 -0.034 0.082" size="0.018 0.012 0.055" mass="0.03"/>
+ <link name="grasp_tcp"><inertial><mass value="0.001"/><inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/></inertial></link>
+ <joint name="tcp_joint" type="fixed"><parent link="Link7"/><child link="grasp_tcp"/><origin xyz="$(arg tcp_xyz)"/></joint>
+ <gazebo reference="tcp_joint"><preserveFixedJoint>true</preserveFixedJoint></gazebo>
+ <link name="camera_link"><inertial><mass value="0.072"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial><visual><geometry><box size="0.025 0.09 0.025"/></geometry></visual><collision><geometry><box size="0.025 0.09 0.025"/></geometry></collision></link>
+ <joint name="camera_mount" type="fixed"><parent link="Link7"/><child link="camera_link"/><origin xyz="$(arg camera_xyz)" rpy="$(arg camera_rpy)"/></joint>
+ <xacro:if value="$(arg simulation)"><link name="camera_color_optical_frame"/><joint name="camera_optical_joint" type="fixed"><parent link="camera_link"/><child link="camera_color_optical_frame"/><origin rpy="-1.57079632679 0 -1.57079632679"/></joint></xacro:if>
+ <gazebo reference="camera_mount"><preserveFixedJoint>true</preserveFixedJoint></gazebo>
+ <xacro:if value="$(arg simulation)">
+ <gazebo><plugin name="rm75_idealized_gripper" filename="librm75_sim_gripper.so"/></gazebo>
+ <gazebo reference="camera_link"><sensor name="d435i_depth" type="depth"><always_on>true</always_on><update_rate>10</update_rate><camera><horizontal_fov>1.5</horizontal_fov><image><width>424</width><height>240</height><format>R8G8B8</format></image><clip><near>0.06</near><far>2.0</far></clip></camera>
+ <plugin name="d435i_sim" filename="libgazebo_ros_openni_kinect.so"><cameraName>camera</cameraName><alwaysOn>true</alwaysOn><updateRate>10</updateRate><imageTopicName>color/image_raw</imageTopicName><cameraInfoTopicName>color/camera_info</cameraInfoTopicName><depthImageTopicName>aligned_depth_to_color/image_raw</depthImageTopicName><depthImageCameraInfoTopicName>aligned_depth_to_color/camera_info</depthImageCameraInfoTopicName><pointCloudTopicName>depth/color/points</pointCloudTopicName><frameName>camera_color_optical_frame</frameName><pointCloudCutoff>0.06</pointCloudCutoff><pointCloudCutoffMax>2.0</pointCloudCutoffMax><hackBaseline>0</hackBaseline></plugin>
+ </sensor></gazebo>
+ </xacro:if>
+</robot>

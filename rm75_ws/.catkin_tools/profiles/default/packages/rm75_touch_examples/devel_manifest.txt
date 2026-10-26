@@ -1,0 +1,6 @@
+rm75_touch_examples
+/root/rm75_ws/devel/.private/rm75_touch_examples/lib/rm75_touch_examples/rm75_get_end_effector_pose /root/rm75_ws/devel/lib/rm75_touch_examples/rm75_get_end_effector_pose
+/root/rm75_ws/devel/.private/rm75_touch_examples/lib/rm75_touch_examples/rm75_initialize_forward_pose /root/rm75_ws/devel/lib/rm75_touch_examples/rm75_initialize_forward_pose
+/root/rm75_ws/devel/.private/rm75_touch_examples/lib/pkgconfig/rm75_touch_examples.pc /root/rm75_ws/devel/lib/pkgconfig/rm75_touch_examples.pc
+/root/rm75_ws/devel/.private/rm75_touch_examples/share/rm75_touch_examples/cmake/rm75_touch_examplesConfig.cmake /root/rm75_ws/devel/share/rm75_touch_examples/cmake/rm75_touch_examplesConfig.cmake
+/root/rm75_ws/devel/.private/rm75_touch_examples/share/rm75_touch_examples/cmake/rm75_touch_examplesConfig-version.cmake /root/rm75_ws/devel/share/rm75_touch_examples/cmake/rm75_touch_examplesConfig-version.cmake

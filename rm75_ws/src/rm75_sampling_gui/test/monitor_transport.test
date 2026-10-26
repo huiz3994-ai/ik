@@ -1,0 +1,4 @@
+<launch>
+  <test test-name="monitor_transport" pkg="rm75_sampling_gui"
+        type="test_monitor_transport.py" time-limit="25"/>
+</launch>

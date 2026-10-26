@@ -1,0 +1,25 @@
+<launch>
+ <arg name="simulation" default="true"/>
+ <param name="robot_description_semantic" textfile="$(find rm75_autonomous_grasp)/config/system.srdf"/>
+ <rosparam command="load" ns="robot_description_kinematics" file="$(find rm_75_moveit_config)/config/kinematics.yaml"/>
+ <rosparam command="load" ns="robot_description_planning" file="$(find rm75_autonomous_grasp)/config/limits.yaml"/>
+ <node name="move_group" pkg="moveit_ros_move_group" type="move_group" output="screen">
+  <param name="planning_plugin" value="ompl_interface/OMPLPlanner"/>
+  <param name="request_adapters" value="default_planner_request_adapters/AddTimeParameterization default_planner_request_adapters/FixWorkspaceBounds default_planner_request_adapters/FixStartStateBounds default_planner_request_adapters/FixStartStateCollision default_planner_request_adapters/FixStartStatePathConstraints"/>
+  <rosparam command="load" file="$(find rm75_autonomous_grasp)/config/ompl.yaml"/>
+  <param name="moveit_controller_manager" value="moveit_simple_controller_manager/MoveItSimpleControllerManager"/>
+  <rosparam if="$(arg simulation)" command="load" file="$(find rm_75_moveit_config)/config/controllers_gazebo.yaml"/>
+  <rosparam unless="$(arg simulation)" command="load" file="$(find rm_75_moveit_config)/config/controllers.yaml"/>
+  <param name="allow_trajectory_execution" value="true"/>
+  <param name="trajectory_execution/execution_duration_monitoring" value="true"/>
+  <param name="trajectory_execution/allowed_execution_duration_scaling" value="2.0"/>
+  <param name="trajectory_execution/allowed_goal_duration_margin" value="3.0"/>
+  <param name="trajectory_execution/allowed_start_tolerance" value="0.02"/>
+  <param name="planning_scene_monitor/publish_planning_scene" value="true"/>
+  <param name="planning_scene_monitor/publish_geometry_updates" value="true"/>
+  <param name="planning_scene_monitor/publish_state_updates" value="true"/>
+  <param name="planning_scene_monitor/publish_transforms_updates" value="true"/>
+  <param name="octomap_frame" value="base_link"/><param name="octomap_resolution" value="0.02"/>
+  <rosparam command="load" file="$(find rm75_autonomous_grasp)/config/sensors.yaml"/>
+ </node>
+</launch>

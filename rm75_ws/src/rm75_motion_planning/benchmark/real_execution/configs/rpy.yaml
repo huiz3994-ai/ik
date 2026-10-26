@@ -1,0 +1,11 @@
+# Protocol manifest; angles are Link7-local increments.
+robot: RM75-6FB
+reference_frame: base_link_to_Link7
+execute: false
+attempts_per_axis: 100
+balance: 50_positive_50_negative
+rotation_deg: 5.0
+axes: [rx, ry, rz]
+angular_speed_deg_s: 5.0
+command_period_sec: 0.020
+supervision_required: true

@@ -1,0 +1,6 @@
+<launch>
+  <arg name="config" default="$(find rm75_sampling_gui)/config/gui.yaml"/>
+  <arg name="tools" default="$(find rm75_sampling_gui)/config/tools.yaml"/>
+  <node pkg="rm75_sampling_gui" type="sampling_gui.py" name="rm75_sampling_gui"
+        args="--offline --config $(arg config) --tools $(arg tools)" output="screen"/>
+</launch>

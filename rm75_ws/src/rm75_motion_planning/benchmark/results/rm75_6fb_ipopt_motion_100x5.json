@@ -1,0 +1,88 @@
+{
+  "model": "RM75-6FB",
+  "seed": 7506,
+  "count_per_scenario": 100,
+  "control_rate_hz": 50,
+  "solver": "CasADi 3.7.2 / Ipopt",
+  "shared_cpp_cases": true,
+  "scenarios": {
+    "short_line": {
+      "success_rate": 1.0,
+      "mean_planning_ms": 4.272661520080874,
+      "p95_planning_ms": 7.218715951603371,
+      "p99_planning_ms": 9.999247399973683,
+      "max_position_error_m": 8.672724808367239e-05,
+      "max_orientation_error_rad": 0.00014909289660250624,
+      "max_velocity_rad_s": 0.057172151505328984,
+      "max_acceleration_rad_s2": 0.18337976145417645,
+      "max_jerk_rad_s3": 1.9996244875635416,
+      "max_joint_jump_rad": 0.0350627303233478,
+      "min_joint_margin_rad": 1.2466266677662496,
+      "failures": {}
+    },
+    "large_cartesian": {
+      "success_rate": 0.9,
+      "mean_planning_ms": 252.84814056998584,
+      "p95_planning_ms": 446.7064329001002,
+      "p99_planning_ms": 641.3148362895303,
+      "max_position_error_m": 0.0016686261018354037,
+      "max_orientation_error_rad": 0.0035419057361404187,
+      "max_velocity_rad_s": 0.25821289527350166,
+      "max_acceleration_rad_s2": 0.3897497636454611,
+      "max_jerk_rad_s3": 1.999978554769836,
+      "max_joint_jump_rad": 0.34676018767765543,
+      "min_joint_margin_rad": 8.589057909347275e-09,
+      "failures": {
+        "UNREACHABLE_OR_STALLED": 9,
+        "JOINT_JUMP": 1
+      }
+    },
+    "random_6d": {
+      "success_rate": 0.7,
+      "mean_planning_ms": 223.85171532980166,
+      "p95_planning_ms": 472.5583342493336,
+      "p99_planning_ms": 602.4380111183567,
+      "max_position_error_m": 0.0018363476056050755,
+      "max_orientation_error_rad": 0.0030461541309704547,
+      "max_velocity_rad_s": 0.2398687766949046,
+      "max_acceleration_rad_s2": 0.37683891917003925,
+      "max_jerk_rad_s3": 1.999988426291741,
+      "max_joint_jump_rad": 0.33461839214038297,
+      "min_joint_margin_rad": 7.797935630549091e-10,
+      "failures": {
+        "UNREACHABLE_OR_STALLED": 27,
+        "JOINT_JUMP": 3
+      }
+    },
+    "near_singular": {
+      "success_rate": 1.0,
+      "mean_planning_ms": 2.778441269911127,
+      "p95_planning_ms": 5.396786805795273,
+      "p99_planning_ms": 5.616441997262889,
+      "max_position_error_m": 8.436131974483335e-05,
+      "max_orientation_error_rad": 0.00022252600108545092,
+      "max_velocity_rad_s": 0.044447415269185435,
+      "max_acceleration_rad_s2": 0.16023291770476478,
+      "max_jerk_rad_s3": 1.9996547291352431,
+      "max_joint_jump_rad": 0.028760877816186123,
+      "min_joint_margin_rad": 2.2087830939565753,
+      "failures": {}
+    },
+    "near_joint_limit": {
+      "success_rate": 0.99,
+      "mean_planning_ms": 7.9364754202833865,
+      "p95_planning_ms": 15.835776642052224,
+      "p99_planning_ms": 19.505137606611257,
+      "max_position_error_m": 5.950009493882007e-05,
+      "max_orientation_error_rad": 0.00010655855486515831,
+      "max_velocity_rad_s": 0.06398781795254213,
+      "max_acceleration_rad_s2": 0.19316802049546128,
+      "max_jerk_rad_s3": 1.999947089370253,
+      "max_joint_jump_rad": 0.03580866461455549,
+      "min_joint_margin_rad": 0.05999999999999961,
+      "failures": {
+        "UNREACHABLE_OR_STALLED": 1
+      }
+    }
+  }
+}

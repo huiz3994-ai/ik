@@ -1,0 +1,13 @@
+# Offline planner defaults. Units are SI: metre, radian, second.
+base_frame: base_link
+flange_frame: Link7
+# Phase 3 intentionally plans and validates base_link -> Link7. Tool/TCP
+# modelling is deferred until physical tooling is installed and calibrated.
+max_translation_step: 0.005
+max_rotation_step: 0.05
+max_joint_jump: 0.35
+max_refinement_depth: 4
+control_period: 0.02          # 50 Hz output samples.
+joint_velocity_limits: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+joint_acceleration_limits: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+joint_jerk_limits: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]

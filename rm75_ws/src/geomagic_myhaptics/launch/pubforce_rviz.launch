@@ -1,0 +1,6 @@
+<launch>
+
+    <include file="$(find geomagic_control)/launch/geomagic.launch" />
+    <node pkg="geomagic_myhaptics" type="pubforce" name="pubforce" output="screen" />
+
+</launch>

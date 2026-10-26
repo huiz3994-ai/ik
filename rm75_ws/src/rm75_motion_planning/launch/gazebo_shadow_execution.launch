@@ -1,0 +1,13 @@
+<launch>
+  <arg name="execute" default="false"/>
+  <arg name="moving_joint" default="6"/>
+  <arg name="delta_rad" default="0.10"/>
+  <arg name="add_obstacle" default="false"/>
+  <node pkg="rm75_motion_planning" type="rm75_gazebo_shadow_execution"
+        name="rm75_gazebo_shadow_execution" output="screen">
+    <param name="execute" value="$(arg execute)"/>
+    <param name="moving_joint" value="$(arg moving_joint)"/>
+    <param name="delta_rad" value="$(arg delta_rad)"/>
+    <param name="add_obstacle" value="$(arg add_obstacle)"/>
+  </node>
+</launch>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440">
+<rect width="100%" height="100%" fill="white"/>
+<text x="450" y="28" text-anchor="middle" font-family="sans-serif" font-size="18">Command-to-feedback response delay distribution</text>
+<line x1="70" y1="370" x2="830" y2="370" stroke="black"/>
+<text x="450" y="420" text-anchor="middle" font-family="sans-serif" font-size="12">cross-correlation delay (ms)</text>
+<rect x="71.0" y="258.0" width="74.0" height="112.0" fill="#6a51a3"/>
+<text x="108.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">2.4e+02</text>
+<rect x="147.0" y="314.0" width="74.0" height="56.0" fill="#6a51a3"/>
+<text x="184.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">2.5e+02</text>
+<rect x="223.0" y="370.0" width="74.0" height="0.0" fill="#6a51a3"/>
+<text x="260.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">2.6e+02</text>
+<rect x="299.0" y="90.0" width="74.0" height="280.0" fill="#6a51a3"/>
+<text x="336.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">2.7e+02</text>
+<rect x="375.0" y="314.0" width="74.0" height="56.0" fill="#6a51a3"/>
+<text x="412.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">2.8e+02</text>
+<rect x="451.0" y="314.0" width="74.0" height="56.0" fill="#6a51a3"/>
+<text x="488.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">3e+02</text>
+<rect x="527.0" y="370.0" width="74.0" height="0.0" fill="#6a51a3"/>
+<text x="564.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">3.1e+02</text>
+<rect x="603.0" y="370.0" width="74.0" height="0.0" fill="#6a51a3"/>
+<text x="640.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">3.2e+02</text>
+<rect x="679.0" y="258.0" width="74.0" height="112.0" fill="#6a51a3"/>
+<text x="716.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">3.3e+02</text>
+<rect x="755.0" y="258.0" width="74.0" height="112.0" fill="#6a51a3"/>
+<text x="792.0" y="390" text-anchor="middle" font-family="sans-serif" font-size="9">3.4e+02</text>
+</svg>

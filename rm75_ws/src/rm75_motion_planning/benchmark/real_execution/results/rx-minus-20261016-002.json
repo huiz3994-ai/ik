@@ -1,0 +1,13 @@
+{
+  "data_source": "real_robot",
+  "reference_frame": "base_link_to_Link7",
+  "run_id": "rx-minus-20261016-002",
+  "scenario": "rx",
+  "status": "PASS",
+  "samples": 393,
+  "final_position_error_m": 0.00033049668312216577,
+  "final_orientation_error_rad": 0.004276968134065382,
+  "stop_latency_sec": null,
+  "stop_distance_max_joint_rad": null,
+  "stop_reason": ""
+}

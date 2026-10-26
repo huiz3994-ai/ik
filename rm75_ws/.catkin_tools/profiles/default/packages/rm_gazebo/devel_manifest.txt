@@ -1,0 +1,4 @@
+rm_robot/rm_gazebo
+/root/rm75_ws/devel/.private/rm_gazebo/lib/pkgconfig/rm_gazebo.pc /root/rm75_ws/devel/lib/pkgconfig/rm_gazebo.pc
+/root/rm75_ws/devel/.private/rm_gazebo/share/rm_gazebo/cmake/rm_gazeboConfig-version.cmake /root/rm75_ws/devel/share/rm_gazebo/cmake/rm_gazeboConfig-version.cmake
+/root/rm75_ws/devel/.private/rm_gazebo/share/rm_gazebo/cmake/rm_gazeboConfig.cmake /root/rm75_ws/devel/share/rm_gazebo/cmake/rm_gazeboConfig.cmake

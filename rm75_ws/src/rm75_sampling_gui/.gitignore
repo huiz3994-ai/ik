@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+experiments/
+web/frontend/node_modules/
+web/frontend/*.tsbuildinfo

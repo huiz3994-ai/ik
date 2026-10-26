@@ -1,0 +1,114 @@
+mode: single_marker_five_targets
+calibration_version: "1"
+base_frame: base_link
+link7_frame: Link7
+tcp_frame: Link7
+marker_type: apriltag16h5
+marker_id: 0
+marker_size_m: 0.0225
+marker_size_measurement_verified: true
+marker_size_measurement_source: supplied_dimensioned_photo_confirmed_by_user
+max_marker_age_s: 0.5
+minimum_marker_pixels: 20.0
+joint_feedback_max_age_s: 0.25
+execution_marker_translation_tolerance_m: 0.003
+execution_marker_rotation_tolerance_deg: 1.0
+# The rack is fixed after the one-time supervised calibration.  Live ID 0
+# detection remains a presence/movement interlock, while the five targets use
+# the physically validated base-marker reference instead of noisy 28 px PnP.
+target_pose_source: calibrated_base_marker_reference
+marker_reference_gate_translation_m: 0.006
+# The 22.5 mm planar tag can settle on a repeatable alternate PnP attitude at
+# this 27 px observation size.  The rack target remains the one-time calibrated
+# base-frame reference; this gate only rejects gross rack movement.  A 20 deg
+# gate accepts the supervised 15.21 deg stable bias while retaining the 6 mm
+# translation gate and per-frame stability checks.
+marker_reference_gate_rotation_deg: 20.0
+target_translation_tolerance_m: 0.004
+target_rotation_tolerance_deg: 2.0
+voltage_timeout_s: 5.0
+
+# The first rack calibration captures the complete camera observation pose.
+# Every automatic pickup restores J7 first, restores joints 1-6, waits for the
+# arm/camera to settle, and then requires a new stable ID=0 frame.
+camera_observation:
+  settle_s: 0.5
+  marker_wait_timeout_s: 8.0
+  joint_tolerance_rad: 0.005
+  # Full pose captured from the 2026-10-17 stable ID=0 observation.  Runtime
+  # moves J7 first, then restores joints 1-6 while holding J7 fixed.
+  joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
+  positions_rad: [-0.5800205223083497, 0.05125065063238144,
+                  -0.32615794973373413, -1.2743211574554443,
+                  0.07775719740390778, -1.8838147819519042,
+                  -1.8999909660339356]
+
+handeye:
+  parent_frame: Link7
+  child_frame: camera_link
+  translation: [0.02418851387922378, 0.09074710310769298, 0.025447015109483433]
+  quaternion_xyzw: [-0.49047045364387526, -0.5138488336139114, -0.49518343803705034, 0.5001914363419274]
+  verified: true
+  source: rm75_qr_task/config/handeye_calibration.yaml
+
+# The five values are user-confirmed official teach-pendant endpoint poses.
+# The active RM75 base stack plans to Link7, and the existing read-only audit
+# found the same controller endpoint feedback consistent with base_link->Link7.
+controller_pose_definition:
+  position_unit: mm
+  angle_unit: rad
+  rotation_convention: fixed_xyz_rpy
+  controller_frame: base_link
+  pose_reference: link7
+  definition_confirmed: true
+  evidence:
+    - rm_driver divides position by 1000000 and Euler by 1000
+    - rm_driver uses tf2 Quaternion.setRPY(rx, ry, rz)
+    - 2026-10-13 read-only FK audit matched controller endpoint to Link7
+    - user confirmed these five values are official teach-pendant endpoint poses
+
+reference_controller_poses:
+  - {slot_id: 1, name: Tool1, values: [-120.806, 254.971, 217.749, 3.073, -0.047, 1.497]}
+  - {slot_id: 2, name: Tool2, values: [-189.102, 258.388, 213.392, 3.135, -0.026, -1.618]}
+  - {slot_id: 3, name: Tool3, values: [-119.581, 326.464, 211.952, -3.126, 0.021, 1.553]}
+  - {slot_id: 4, name: Tool4, values: [-189.641, 328.648, 211.018, -3.124, -0.019, -1.728]}
+  - {slot_id: 5, name: Tool5, values: [-249.211, 116.644, 177.064, -3.137, 0.019, -1.608]}
+
+# No Link7-to-TCP input is needed: pose_reference is Link7 and the active
+# MoveIt chain plans that endpoint directly.  The saved calibration schema
+# inserts an internal identity solely for backward-compatible message fields.
+
+# The user explicitly does not want rack/tool environment collision geometry.
+# MoveIt still checks the robot model's joint limits and self-collision.  The
+# pickup path is observation pose -> visual Link7 target -> observation pose.
+motion:
+  speed_scale: 0.02
+  pickup_j7_tolerance_rad: 0.01
+  # Protect the eye-in-hand RGB camera during approach, then lift the long
+  # tool clear of the rack before any return motion.
+  j7_pre_rotate: true
+  vertical_lift_m: 0.20
+  # Returning a held tool approaches from 20 cm above the taught slot, then
+  # descends 18 cm and releases 2 cm above the taught Link7 pose.
+  placement_descent_m: 0.18
+  # Some slots cannot keep the exact rack orientation for all 20 cm near the
+  # workspace boundary.  The planner first tries a rigid lift, then bounded
+  # late wrist adjustments while TCP translation remains on the same world-Z
+  # line.  This value is an upper bound; the deterministic field fallback
+  # begins the small wrist adjustment after 7 cm to bound planning latency.
+  vertical_straight_clearance_m: 0.17
+  vertical_lift_final_tilt_deg: 10.0
+  cartesian_step_m: 0.005
+  minimum_cartesian_fraction: 0.999
+  feedback_settle_s: 0.25
+  joint_settle_timeout_s: 2.0
+  pre_power_settle_s: 2.0
+  environment_collision_geometry_required: false
+
+verifications:
+  controller_frames_verified: true
+  tcp_verified: true
+  marker_geometry_verified: true
+  hand_eye_verified: true
+  rack_rigid_verified: true
+  voltage_interface_verified: true

@@ -1,0 +1,15 @@
+# Fail-closed Stage 3 commissioning limits. Units: radian and second.
+# These are NOT Stage 4 calibrated values. Do not replace them from a report
+# marked provisional_do_not_deploy; the analyzer writes recommendations to a
+# separate YAML and never edits this deployed configuration.
+joint_limit_margin_rad: 0.02
+warning_limit_margin_rad: 0.05
+max_tracking_error_rad: 0.03
+warning_tracking_ratio: 0.80
+feedback_timeout_sec: 0.10
+stop_observation_sec: 2.0
+# Provisional Stage 3 commissioning values, not Stage 4 calibration results.
+force_warning_n: 6.0
+force_stop_n: 8.0
+torque_warning_nm: 0.4
+torque_stop_nm: 0.5

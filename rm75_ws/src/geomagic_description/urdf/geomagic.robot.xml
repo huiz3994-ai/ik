@@ -1,0 +1,6 @@
+<Robot name="geomagic" file="geomagic.dae">
+  <Manipulator name="arm">
+    <base>base</base>
+    <effector>stylus</effector>
+  </Manipulator>
+</Robot>
