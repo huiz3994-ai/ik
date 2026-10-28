@@ -10,6 +10,12 @@ import httpx
 import websockets
 
 
+COMMISSIONED_NON_SINGULAR_JOINTS = [
+    -2.0259972946, -0.2410891997, -2.7937972946, 0.4415548149,
+    2.8620793129, -1.5531722160, -0.3058461575,
+]
+
+
 async def validate(base_url: str) -> None:
     base = base_url.rstrip("/")
     ws_url = ("wss://" if base.startswith("https://") else "ws://") + base.split("://", 1)[1]
@@ -49,6 +55,26 @@ async def validate(base_url: str) -> None:
             heartbeat_task = asyncio.create_task(heartbeat())
             drain_task = asyncio.create_task(drain())
 
+            # The validator must be repeatable against one long-running
+            # simulator.  Earlier runs intentionally leave the in-memory plant
+            # at other valid poses, some of which cannot reach every 10 mm jog
+            # direction.  Restore the commissioned non-singular posture before
+            # exercising all twelve directions; do not relax the IK threshold.
+            (await client.post("/api/v1/commands/recover",
+                json={"payload": {}}, headers=headers)).raise_for_status()
+            initialized = await client.post("/api/v1/joints/execute", json={
+                "target": COMMISSIONED_NON_SINGULAR_JOINTS}, headers=headers)
+            initialized.raise_for_status()
+            for _ in range(30):
+                await asyncio.sleep(0.1)
+                joints = (await client.get("/api/v1/state")).json()["joints"]
+                if max(abs(joints["joint{}".format(index + 1)] - target)
+                       for index, target in enumerate(
+                           COMMISSIONED_NON_SINGULAR_JOINTS)) < 0.015:
+                    break
+            else:
+                raise RuntimeError("仿真关节未回到点动验收初始姿态")
+
             # Exercise the same hold/release endpoints used by pointer, touch
             # and keyboard interaction while the plant is at its commissioned
             # non-singular simulation posture.
@@ -68,6 +94,24 @@ async def validate(base_url: str) -> None:
                 stopped.raise_for_status()
                 if not stopped.json().get("stopped"):
                     raise RuntimeError("{}松开后未确认停止".format(direction))
+
+            # Exercise the ordinary Touch-teleop buttons, not only the Z-force
+            # workflow.  This verifies the exact start/stop command pair used
+            # by both Web pages and its state exposed back to the UI.
+            response = await client.post("/api/v1/commands/start_teleop",
+                json={"payload": {}}, headers=headers)
+            response.raise_for_status()
+            state = (await client.get("/api/v1/state")).json()
+            if (state.get("operator_state") != "TELEOP" or
+                    state.get("control_launch_mode") != "teleop"):
+                raise RuntimeError("普通Touch遥操作未进入TELEOP/teleop状态")
+            response = await client.post("/api/v1/commands/stop_teleop",
+                json={"payload": {}}, headers=headers)
+            response.raise_for_status()
+            state = (await client.get("/api/v1/state")).json()
+            if (state.get("operator_state") != "IDLE" or
+                    state.get("control_launch_mode") is not None):
+                raise RuntimeError("停止普通Touch遥操作后未回到IDLE")
 
             target = [0.25, -0.18, 0.12, -0.10, 0.08, 0.06, -0.04]
             response = await client.post("/api/v1/joints/execute",
@@ -159,10 +203,16 @@ async def validate(base_url: str) -> None:
             select = await client.post("/api/v1/commands/select_tool", json={
                 "payload": {"tool": "Tool2"}}, headers=headers)
             select.raise_for_status()
-            out_of_order = await client.post("/api/v1/commands/plan_tool",
-                json={"payload": {}}, headers=headers)
-            if out_of_order.status_code != 409:
-                raise RuntimeError("二维码目标未计算时，Dry Run未被拒绝")
+            # A long-running simulator may retain a previously computed target
+            # set, just as the HMI does until a new observation replaces it.
+            # Test the ordering rejection whenever that precondition is false,
+            # without treating a valid retained target set as a clean startup.
+            state = (await client.get("/api/v1/state")).json()
+            if not state.get("five_target_status", {}).get("targets_valid"):
+                out_of_order = await client.post("/api/v1/commands/plan_tool",
+                    json={"payload": {}}, headers=headers)
+                if out_of_order.status_code != 409:
+                    raise RuntimeError("二维码目标未计算时，Dry Run未被拒绝")
             for command in ("detect_marker", "compute_targets", "preview_tool",
                             "plan_tool", "execute_tool"):
                 response = await client.post("/api/v1/commands/{}".format(command),
@@ -234,8 +284,9 @@ async def validate(base_url: str) -> None:
             if "lease" not in disconnected_jog.get("stop_reason", "").lower():
                 raise RuntimeError("WebSocket断联停止原因未记录控制租约失效")
             print("PASS: simulation health, lease heartbeat, joint tracking, twelve "
-                  "Cartesian hold/release directions, WebSocket-disconnect stop, Z-only "
-                  "force/position mode, bounded Touch-Y haptics, voltage, sampling "
+                  "Cartesian hold/release directions, ordinary Touch teleop start/stop, "
+                  "WebSocket-disconnect stop, Z-only force/position mode, bounded "
+                  "Touch-Y haptics, voltage, sampling "
                   "hardware, SAFE_STOP rejection/recovery, full QR detect/compute/"
                   "preview/plan/execute/cancel/return flow with order guards, "
                   "five-tool manual Dry Run/execute with honest unverified grasp "

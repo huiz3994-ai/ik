@@ -18,7 +18,6 @@
     <param name="max_touch_translation" value="10.0"/>
     <param name="max_joint_velocity" value="0.2"/>
     <param name="publish_rate" value="50.0"/>
-    <param name="ik_timeout" value="0.01"/>
     <param name="touch_pose_topic" value="/test/joint/pose"/>
     <param name="touch_joy_topic" value="/test/joint/joy"/>
     <param name="joint_state_topic" value="/test/joint/joints"/>
@@ -44,7 +43,6 @@
     <param name="max_touch_translation" value="10.0"/>
     <param name="max_joint_velocity" value="0.2"/>
     <param name="publish_rate" value="50.0"/>
-    <param name="ik_timeout" value="0.01"/>
     <param name="touch_pose_topic" value="/test/trajectory/pose"/>
     <param name="touch_joy_topic" value="/test/trajectory/joy"/>
     <param name="joint_state_topic" value="/test/trajectory/joints"/>
@@ -70,7 +68,6 @@
     <param name="max_touch_translation" value="10.0"/>
     <param name="max_joint_velocity" value="0.2"/>
     <param name="publish_rate" value="50.0"/>
-    <param name="ik_timeout" value="0.01"/>
     <param name="touch_pose_topic" value="/test/plain/pose"/>
     <param name="touch_joy_topic" value="/test/plain/joy"/>
     <param name="joint_state_topic" value="/test/plain/joints"/>
@@ -102,7 +99,6 @@
     <param name="max_z_position_travel" value="0.004"/>
     <param name="max_joint_velocity" value="0.2"/>
     <param name="publish_rate" value="50.0"/>
-    <param name="ik_timeout" value="0.01"/>
     <param name="touch_pose_topic" value="/test/z_only/pose"/>
     <param name="touch_joy_topic" value="/test/z_only/joy"/>
     <param name="joint_state_topic" value="/test/z_only/joints"/>

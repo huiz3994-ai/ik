@@ -18,11 +18,20 @@ orientation_enabled: true
 use_touch_increment: true
 
 publish_rate: 100.0
-ik_timeout: 0.01
 command_duration: 0.08
 input_timeout: 0.15
 max_touch_translation: 0.25
 max_joint_velocity: 1.0
+max_joint_acceleration: 1.5
+min_control_dt: 0.001
+max_control_dt: 0.04
+max_ee_linear_velocity: 0.12
+max_ee_angular_velocity: 0.60
+qp_velocity_smoothing_weight: 0.02
+qp_posture_weight: 0.08
+posture_reference_update_rate: 0.30
+qp_soft_limit_margin: 0.20
+qp_timeout: 0.002
 
 # Z velocity force outer loop, base_link axis; units m/(N*s), NOT m/N.
 hybrid_control_enabled: true
@@ -49,7 +58,6 @@ force_motion_sign: 1.0
 force_sign: 1.0
 force_frame: base_link
 force_frame_rotation_rpy: [0.0, 0.0, 0.0]
-ik_failure_timeout: 0.25
 require_touch_increment: true
 
 force_topic: /sampling_sim/wrench

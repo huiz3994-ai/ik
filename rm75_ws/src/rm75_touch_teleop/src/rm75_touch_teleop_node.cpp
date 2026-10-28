@@ -29,7 +29,7 @@
 #include "rm75_touch_teleop/mapping.h"
 #include "rm75_touch_teleop/hybrid_force_control.h"
 #include "rm75_touch_teleop/haptic_renderer.h"
-#include "rm75_touch_teleop/damped_differential_ik.h"
+#include "rm75_touch_teleop/constrained_differential_ik.h"
 
 namespace {
 
@@ -99,7 +99,6 @@ class Rm75TouchTeleop {
     private_nh_.param("max_z_position_travel", max_z_position_travel_, 0.0);
     private_nh_.param("use_touch_increment", use_touch_increment_, true);
     private_nh_.param("publish_rate", publish_rate_, 100.0);
-    private_nh_.param("ik_timeout", ik_timeout_, 0.01);
     private_nh_.param("command_duration", command_duration_, 0.08);
     private_nh_.param("max_touch_translation", max_touch_translation_, 0.25);
     private_nh_.param("max_joint_velocity", max_joint_velocity_, 0.8);
@@ -167,25 +166,46 @@ class Rm75TouchTeleop {
     private_nh_.param("expected_force_coordinate", expected_coordinate_, -1);
     private_nh_.param("require_touch_increment", require_increment_, false);
     private_nh_.param("max_joint_tracking_error", max_joint_tracking_error_, 0.15);
-    private_nh_.param("ik_failure_timeout", ik_failure_timeout_, 0.25);
-    private_nh_.param("j2_limit_avoidance_enabled",
-                      j2_limit_avoidance_enabled_, true);
-    private_nh_.param("j2_limit_avoidance_margin",
-                      j2_limit_avoidance_margin_, 0.25);
-    private_nh_.param("j2_reseed_step", j2_reseed_step_, 0.05);
-    private_nh_.param("j2_reseed_timeout", j2_reseed_timeout_, 0.002);
-    private_nh_.param("j2_reseed_attempts", j2_reseed_attempts_, 4);
-    private_nh_.param("j2_reseed_max_joint_delta",
-                      j2_reseed_max_joint_delta_, 0.35);
-    private_nh_.param("differential_ik_fallback_enabled",
-                      differential_ik_fallback_enabled_, true);
-    private_nh_.param("differential_ik_damping", differential_ik_damping_, 0.05);
-    private_nh_.param("differential_ik_max_joint_step",
-                      differential_ik_max_joint_step_, 0.05);
-    private_nh_.param("differential_ik_max_translation_error",
-                      differential_ik_max_translation_error_, 0.02);
-    private_nh_.param("differential_ik_max_rotation_error",
-                      differential_ik_max_rotation_error_, 0.15);
+    private_nh_.param("max_joint_acceleration", max_joint_acceleration_, 1.5);
+    private_nh_.param("min_control_dt", min_control_dt_, 0.001);
+    private_nh_.param("max_control_dt", max_control_dt_, 0.04);
+    private_nh_.param("posture_reference_update_rate",
+                      posture_reference_update_rate_, 0.30);
+    private_nh_.param("qp_translation_gain", qp_config_.translation_gain,
+                      qp_config_.translation_gain);
+    private_nh_.param("qp_rotation_gain", qp_config_.rotation_gain,
+                      qp_config_.rotation_gain);
+    private_nh_.param("max_ee_linear_velocity", qp_config_.max_linear_velocity,
+                      qp_config_.max_linear_velocity);
+    private_nh_.param("max_ee_angular_velocity", qp_config_.max_angular_velocity,
+                      qp_config_.max_angular_velocity);
+    private_nh_.param("qp_translation_weight", qp_config_.translation_weight,
+                      qp_config_.translation_weight);
+    private_nh_.param("qp_rotation_weight", qp_config_.rotation_weight,
+                      qp_config_.rotation_weight);
+    private_nh_.param("qp_regularization", qp_config_.regularization,
+                      qp_config_.regularization);
+    private_nh_.param("qp_velocity_smoothing_weight",
+                      qp_config_.velocity_smoothing_weight,
+                      qp_config_.velocity_smoothing_weight);
+    private_nh_.param("qp_posture_weight", qp_config_.posture_weight,
+                      qp_config_.posture_weight);
+    private_nh_.param("qp_posture_gain", qp_config_.posture_gain,
+                      qp_config_.posture_gain);
+    private_nh_.param("qp_soft_limit_gain", qp_config_.soft_limit_gain,
+                      qp_config_.soft_limit_gain);
+    private_nh_.param("qp_soft_limit_margin", qp_config_.soft_limit_margin,
+                      qp_config_.soft_limit_margin);
+    private_nh_.param("qp_singular_value_threshold",
+                      qp_config_.singular_value_threshold,
+                      qp_config_.singular_value_threshold);
+    private_nh_.param("qp_singular_regularization",
+                      qp_config_.singular_regularization,
+                      qp_config_.singular_regularization);
+    private_nh_.param("qp_max_iterations", qp_config_.solver.max_iterations,
+                      qp_config_.solver.max_iterations);
+    private_nh_.param("qp_timeout", qp_config_.solver.time_limit_sec,
+                      qp_config_.solver.time_limit_sec);
     auto& c = hybrid_.cfg;
     private_nh_.param("desired_force", c.desired_force, c.desired_force);
     private_nh_.param("contact_threshold", c.contact_threshold, c.contact_threshold);
@@ -214,9 +234,10 @@ class Rm75TouchTeleop {
           (output_mode_ == "rm_joint_pos" && expected_coordinate_ < 0))
         throw std::runtime_error("Hardware sampling requires expected_force_coordinate in [0,2]");
     }
-    const double positive[] = {publish_rate_, ik_timeout_, command_duration_, input_timeout_,
+    const double positive[] = {publish_rate_, command_duration_, input_timeout_,
         max_touch_translation_, max_joint_velocity_, force_feedback_timeout_,
-        max_external_force_, max_external_torque_, max_joint_tracking_error_, ik_failure_timeout_};
+        max_external_force_, max_external_torque_, max_joint_tracking_error_,
+        max_joint_acceleration_, min_control_dt_, max_control_dt_};
     for (double v : positive)
       if (!std::isfinite(v) || v <= 0) throw std::runtime_error("Invalid positive teleop parameter");
     if (!std::isfinite(position_scale_) || position_scale_ <= 0 ||
@@ -227,23 +248,10 @@ class Rm75TouchTeleop {
       throw std::runtime_error("force_startup_grace_period must be nonnegative");
     if (!std::isfinite(max_z_position_travel_) || max_z_position_travel_ < 0.0)
       throw std::runtime_error("max_z_position_travel must be nonnegative");
-    if (!std::isfinite(j2_limit_avoidance_margin_) ||
-        j2_limit_avoidance_margin_ <= 0.0 ||
-        !std::isfinite(j2_reseed_step_) || j2_reseed_step_ <= 0.0 ||
-        !std::isfinite(j2_reseed_timeout_) || j2_reseed_timeout_ <= 0.0 ||
-        j2_reseed_attempts_ < 1 || j2_reseed_attempts_ > 12 ||
-        !std::isfinite(j2_reseed_max_joint_delta_) ||
-        j2_reseed_max_joint_delta_ <= 0.0 ||
-        !std::isfinite(differential_ik_damping_) ||
-        differential_ik_damping_ <= 0.0 ||
-        !std::isfinite(differential_ik_max_joint_step_) ||
-        differential_ik_max_joint_step_ <= 0.0 ||
-        !std::isfinite(differential_ik_max_translation_error_) ||
-        differential_ik_max_translation_error_ <= 0.0 ||
-        !std::isfinite(differential_ik_max_rotation_error_) ||
-        differential_ik_max_rotation_error_ <= 0.0) {
-      throw std::runtime_error("Invalid J2 joint-limit avoidance parameters");
-    }
+    if (min_control_dt_ > max_control_dt_ ||
+        !std::isfinite(posture_reference_update_rate_) ||
+        posture_reference_update_rate_ <= 0.0)
+      throw std::runtime_error("Invalid control timing or posture reference parameters");
     std::vector<double> rpy;
     if (!private_nh_.getParam("force_frame_rotation_rpy", rpy)) rpy = {0, 0, 0};
     if (rpy.size() != 3 || !std::isfinite(rpy[0]) || !std::isfinite(rpy[1]) || !std::isfinite(rpy[2]))
@@ -271,6 +279,23 @@ class Rm75TouchTeleop {
       throw std::runtime_error("RM75 teleop requires exactly 7 arm joints; group '" +
                                planning_group_ + "' has " +
                                std::to_string(joint_names_.size()));
+    }
+    for (std::size_t i = 0; i < joint_names_.size(); ++i) {
+      const moveit::core::VariableBounds& bounds =
+          robot_model_->getVariableBounds(joint_names_[i]);
+      if (!bounds.position_bounded_ || !std::isfinite(bounds.min_position_) ||
+          !std::isfinite(bounds.max_position_))
+        throw std::runtime_error("All RM75 joints require finite position bounds");
+      position_lower_[i] = bounds.min_position_;
+      position_upper_[i] = bounds.max_position_;
+      double limit = max_joint_velocity_;
+      if (bounds.velocity_bounded_)
+        limit = std::min(limit, std::max(std::abs(bounds.min_velocity_),
+                                         std::abs(bounds.max_velocity_)));
+      if (!std::isfinite(limit) || limit <= 0.0)
+        throw std::runtime_error("All RM75 joints require positive velocity limits");
+      velocity_limit_[i] = limit;
+      acceleration_limit_[i] = max_joint_acceleration_;
     }
 
     latest_state_.reset(new moveit::core::RobotState(robot_model_));
@@ -331,8 +356,17 @@ class Rm75TouchTeleop {
     haptic_tracking_error_pub_ = private_nh_.advertise<geometry_msgs::Vector3Stamped>("haptic_tracking_error", 1);
     haptic_fresh_pub_ = private_nh_.advertise<std_msgs::Bool>("haptic_force_fresh", 1, true);
     haptic_device_command_pub_ = private_nh_.advertise<geometry_msgs::Vector3Stamped>("haptic_device_command", 1);
-    timer_ = nh_.createWallTimer(ros::WallDuration(1.0 / std::max(1.0, publish_rate_)),
-                             &Rm75TouchTeleop::update, this);
+    qp_status_pub_ = private_nh_.advertise<std_msgs::String>("qp_status", 1, true);
+    qp_solve_time_pub_ = private_nh_.advertise<std_msgs::Float64>("qp_solve_time_ms", 1);
+    control_dt_pub_ = private_nh_.advertise<std_msgs::Float64>("control_dt", 1);
+    target_joint_pub_ = private_nh_.advertise<std_msgs::Float64MultiArray>("target_joint", 1);
+    actual_joint_pub_ = private_nh_.advertise<std_msgs::Float64MultiArray>("actual_joint", 1);
+    joint_velocity_pub_ = private_nh_.advertise<std_msgs::Float64MultiArray>("joint_velocity", 1);
+    joint_acceleration_pub_ = private_nh_.advertise<std_msgs::Float64MultiArray>("joint_acceleration", 1);
+    tracking_error_pub_ = private_nh_.advertise<std_msgs::Float64MultiArray>("joint_tracking_error", 1);
+    timer_ = nh_.createSteadyTimer(
+        ros::WallDuration(1.0 / std::max(1.0, publish_rate_)),
+        &Rm75TouchTeleop::update, this);
     publishActive(false);
     publishMode();
     std_msgs::Bool haptic_enabled_msg; haptic_enabled_msg.data = haptic_enabled_;
@@ -621,10 +655,12 @@ class Rm75TouchTeleop {
     robot_orientation_anchor_ = robot_anchor_.linear();
     *command_seed_ = *latest_state_;
     latest_state_->copyJointGroupPositions(joint_group_, last_command_);
+    for (int i = 0; i < rm75_touch_teleop::kRm75Dof; ++i)
+      posture_reference_[i] = last_command_[static_cast<std::size_t>(i)];
+    last_valid_velocity_.setZero();
     have_command_seed_ = true;
     hybrid_.reset(robot_anchor_.translation().z());
-    last_update_wall_time_ = now;
-    ik_failure_since_ = ros::WallTime();
+    last_control_steady_time_ = ros::SteadyTime::now();
     stop_latched_ = false;
     active_ = true;
     std_msgs::String reason; reason_pub_.publish(reason);
@@ -685,13 +721,28 @@ class Rm75TouchTeleop {
     ROS_ERROR_STREAM("RM75 SAFE_STOP: " << reason);
   }
 
-  void update(const ros::WallTimerEvent&) {
+  void update(const ros::SteadyTimerEvent&) {
     const ros::WallTime now = ros::WallTime::now();
     updateHaptic(now);
     if (!active_) return;
-    const double elapsed = (now - last_update_wall_time_).toSec();
-    last_update_wall_time_ = now;
-    const double dt = std::min(1.0 / publish_rate_, std::max(0.0, elapsed));
+    const ros::SteadyTime control_now = ros::SteadyTime::now();
+    const double elapsed =
+        (control_now - last_control_steady_time_).toSec();
+    last_control_steady_time_ = control_now;
+    if (!std::isfinite(elapsed) || elapsed <= 0.0) {
+      safetyStop("invalid monotonic control period");
+      return;
+    }
+    if (elapsed < min_control_dt_) {
+      ROS_DEBUG_THROTTLE(1.0,
+                         "Control period %.6f s is below %.6f s; cycle skipped",
+                         elapsed, min_control_dt_);
+      return;
+    }
+    const double dt = std::min(max_control_dt_, elapsed);
+    if (elapsed > max_control_dt_)
+      ROS_WARN_THROTTLE(1.0, "Control period %.4f s capped to %.4f s for constraints",
+                        elapsed, dt);
     if ((now - last_touch_wall_time_).toSec() > input_timeout_ ||
         (now - last_joint_wall_time_).toSec() > input_timeout_ ||
         (now - last_joy_wall_time_).toSec() > input_timeout_ ||
@@ -809,57 +860,100 @@ class Rm75TouchTeleop {
                                   touch_delta_rotation) *
                               robot_orientation_anchor_;
     }
+    target_pose_ = rm75_touch_teleop::limitPoseStep(
+        previous_target, target_pose_, qp_config_.max_linear_velocity,
+        qp_config_.max_angular_velocity, dt);
 
-    moveit::core::RobotState candidate(*command_seed_);
-    if (!solveIKWithJ2LimitAvoidance(target_pose_, candidate)) {
+    const Eigen::Isometry3d measured_pose =
+        latest_state_->getGlobalLinkTransform(tip_link_);
+    const moveit::core::LinkModel* tip = robot_model_->getLinkModel(tip_link_);
+    Eigen::MatrixXd dynamic_jacobian;
+    if (!tip || !latest_state_->getJacobian(joint_group_, tip,
+                                             Eigen::Vector3d::Zero(),
+                                             dynamic_jacobian) ||
+        dynamic_jacobian.rows() != 6 || dynamic_jacobian.cols() != 7 ||
+        !dynamic_jacobian.allFinite()) {
       target_pose_ = previous_target;
-      if (ik_failure_since_.isZero()) ik_failure_since_ = now;
-      if (hybrid_enabled_ && (now - ik_failure_since_).toSec() > ik_failure_timeout_)
-        safetyStop("persistent IK failure or joint bounds violation");
-      ROS_WARN_THROTTLE(0.5, "RM75 IK failed or violated joint bounds; command withheld");
+      safetyStop("invalid 6x7 Jacobian from measured joint feedback");
       return;
     }
 
-    ik_failure_since_ = ros::WallTime();
-    std::vector<double> desired;
-    candidate.copyJointGroupPositions(joint_group_, desired);
-    if (desired.size() != 7 || last_command_.size() != 7) return;
-    const double max_step = max_joint_velocity_ / std::max(1.0, publish_rate_);
-    double fraction = 1.0;
-    if (hybrid_enabled_) {
-      for (std::size_t i = 0; i < desired.size(); ++i) {
-        const double delta = std::abs(desired[i] - last_command_[i]);
-        if (delta > max_step) fraction = std::min(fraction, max_step / delta);
+    rm75_touch_teleop::DifferentialIkInput qp_input;
+    qp_input.jacobian = dynamic_jacobian;
+    qp_input.pose_error.head<3>() =
+        target_pose_.translation() - measured_pose.translation();
+    const Eigen::AngleAxisd rotation_error(
+        target_pose_.linear() * measured_pose.linear().transpose());
+    qp_input.pose_error.tail<3>() =
+        rotation_error.axis() * rotation_error.angle();
+    qp_input.position_lower = position_lower_;
+    qp_input.position_upper = position_upper_;
+    qp_input.velocity_limit = velocity_limit_;
+    qp_input.acceleration_limit = acceleration_limit_;
+    qp_input.previous_velocity = last_valid_velocity_;
+    qp_input.posture_reference = posture_reference_;
+    qp_input.dt = dt;
+    for (int i = 0; i < rm75_touch_teleop::kRm75Dof; ++i) {
+      qp_input.measured_position[i] = actual[static_cast<std::size_t>(i)];
+      qp_input.previous_command[i] = last_command_[static_cast<std::size_t>(i)];
+    }
+
+    const rm75_touch_teleop::DifferentialIkResult qp =
+        rm75_touch_teleop::solveConstrainedDifferentialIk(qp_input, qp_config_);
+    publishQpStatus(qp, dt);
+    if (!qp.success()) {
+      target_pose_ = previous_target;
+      safetyStop(std::string("constrained QP failed: ") + qp.reason);
+      return;
+    }
+
+    std::vector<double> desired(7);
+    rm75_touch_teleop::JointVector acceleration;
+    for (int i = 0; i < rm75_touch_teleop::kRm75Dof; ++i) {
+      desired[static_cast<std::size_t>(i)] =
+          last_command_[static_cast<std::size_t>(i)] + qp.velocity[i] * dt;
+      acceleration[i] = (qp.velocity[i] - last_valid_velocity_[i]) / dt;
+      if (!std::isfinite(desired[static_cast<std::size_t>(i)]) ||
+          desired[static_cast<std::size_t>(i)] < position_lower_[i] - 1e-9 ||
+          desired[static_cast<std::size_t>(i)] > position_upper_[i] + 1e-9 ||
+          qp.velocity[i] < qp.lower_bound[i] - 1e-8 ||
+          qp.velocity[i] > qp.upper_bound[i] + 1e-8) {
+        target_pose_ = previous_target;
+        safetyStop("QP solution failed post-solve safety validation");
+        return;
       }
     }
-    for (std::size_t i = 0; i < desired.size(); ++i) {
-      if (!std::isfinite(desired[i])) { safetyStop("non-finite IK solution"); return; }
-      const double delta = desired[i] - last_command_[i];
-      desired[i] = last_command_[i] + (hybrid_enabled_ ? fraction * delta :
-          std::max(-max_step, std::min(max_step, delta)));
+    moveit::core::RobotState candidate(*latest_state_);
+    candidate.setJointGroupPositions(joint_group_, desired);
+    candidate.update();
+    if (!candidate.satisfiesBounds(joint_group_)) {
+      target_pose_ = previous_target;
+      safetyStop("QP command violates MoveIt joint bounds");
+      return;
     }
     if (hybrid_enabled_ && hybrid_.mode == rm75_touch_teleop::ControlMode::CONTACT_MODE) {
-      // Enforce the Cartesian Z bound on FK of the actual limited joint command.
-      // Joint interpolation and orientation changes can otherwise introduce Z motion.
       const double old_z = command_seed_->getGlobalLinkTransform(tip_link_).translation().z();
       const double z_bound = std::min(hybrid_.cfg.max_z_step, hybrid_.cfg.max_z_velocity * dt);
-      bool accepted = false;
-      for (int attempt = 0; attempt < 16; ++attempt) {
-        candidate.setJointGroupPositions(joint_group_, desired); candidate.update();
-        const double new_z = candidate.getGlobalLinkTransform(tip_link_).translation().z();
-        if (std::abs(new_z - old_z) <= z_bound &&
-            std::abs(new_z - measured_z) <= hybrid_.cfg.max_z_tracking_error &&
-            !hybrid_.travelExceeded(new_z, measured_z)) { accepted = true; break; }
-        for (std::size_t i = 0; i < desired.size(); ++i)
-          desired[i] = last_command_[i] + 0.5 * (desired[i] - last_command_[i]);
+      const double new_z = candidate.getGlobalLinkTransform(tip_link_).translation().z();
+      if (std::abs(new_z - old_z) > z_bound + 1e-9 ||
+          std::abs(new_z - measured_z) > hybrid_.cfg.max_z_tracking_error ||
+          hybrid_.travelExceeded(new_z, measured_z)) {
+        target_pose_ = previous_target;
+        safetyStop("QP command cannot satisfy Cartesian Z safety limits");
+        return;
       }
-      if (!accepted) { safetyStop("cannot satisfy Cartesian Z command limits"); return; }
     }
     command_seed_->setJointGroupPositions(joint_group_, desired);
     command_seed_->enforceBounds(joint_group_);
     command_seed_->copyJointGroupPositions(joint_group_, desired);
     command_seed_->update();
     last_command_ = desired;
+    last_valid_velocity_ = qp.velocity;
+    posture_reference_ = rm75_touch_teleop::updatePostureReference(
+        posture_reference_, qp_input.measured_position,
+        posture_reference_update_rate_, dt);
+    publishJointDiagnostics(qp_input.measured_position, qp.velocity,
+                            acceleration, desired);
     if (hybrid_enabled_) {
       hybrid_.commit(command_seed_->getGlobalLinkTransform(tip_link_).translation().z(), dt);
       std_msgs::Float64 setpoint; setpoint.data = hybrid_.setpoint;
@@ -893,154 +987,45 @@ class Rm75TouchTeleop {
     target_pub_.publish(target);
   }
 
-  double j2LimitMargin(const moveit::core::RobotState& state) const {
-    const moveit::core::VariableBounds& bounds =
-        robot_model_->getVariableBounds(joint_names_[1]);
-    if (!bounds.position_bounded_) return std::numeric_limits<double>::infinity();
-    const double position = state.getVariablePosition(joint_names_[1]);
-    return std::min(position - bounds.min_position_,
-                    bounds.max_position_ - position);
+  void publishQpStatus(
+      const rm75_touch_teleop::DifferentialIkResult& qp,
+      double measured_dt) {
+    std_msgs::String status;
+    status.data = std::string(rm75_touch_teleop::boxQpStatusName(qp.status)) +
+        ";reason=" + qp.reason +
+        ";iterations=" + std::to_string(qp.iterations) +
+        ";min_singular=" + std::to_string(qp.minimum_singular_value) +
+        ";kkt=" + std::to_string(qp.kkt_residual);
+    qp_status_pub_.publish(status);
+    std_msgs::Float64 value;
+    value.data = qp.solve_time_sec * 1000.0;
+    qp_solve_time_pub_.publish(value);
+    value.data = measured_dt;
+    control_dt_pub_.publish(value);
   }
 
-  bool solveIKWithJ2LimitAvoidance(
-      const Eigen::Isometry3d& target,
-      moveit::core::RobotState& result) {
-    moveit::core::RobotState primary(*command_seed_);
-    const bool primary_valid =
-        primary.setFromIK(joint_group_, target, tip_link_, ik_timeout_) &&
-        primary.satisfiesBounds(joint_group_);
-    if (!j2_limit_avoidance_enabled_) {
-      if (primary_valid) result = primary;
-      return primary_valid;
+  void publishJointDiagnostics(
+      const rm75_touch_teleop::JointVector& actual,
+      const rm75_touch_teleop::JointVector& velocity,
+      const rm75_touch_teleop::JointVector& acceleration,
+      const std::vector<double>& target) {
+    std_msgs::Float64MultiArray target_msg, actual_msg, velocity_msg;
+    std_msgs::Float64MultiArray acceleration_msg, error_msg;
+    target_msg.data.resize(7); actual_msg.data.resize(7);
+    velocity_msg.data.resize(7); acceleration_msg.data.resize(7);
+    error_msg.data.resize(7);
+    for (int i = 0; i < rm75_touch_teleop::kRm75Dof; ++i) {
+      target_msg.data[i] = target[static_cast<std::size_t>(i)];
+      actual_msg.data[i] = actual[i];
+      velocity_msg.data[i] = velocity[i];
+      acceleration_msg.data[i] = acceleration[i];
+      error_msg.data[i] = target_msg.data[i] - actual_msg.data[i];
     }
-
-    const moveit::core::VariableBounds& bounds =
-        robot_model_->getVariableBounds(joint_names_[1]);
-    if (!bounds.position_bounded_) {
-      if (primary_valid) result = primary;
-      return primary_valid;
-    }
-
-    double best_margin = -std::numeric_limits<double>::infinity();
-    if (primary_valid) {
-      result = primary;
-      best_margin = j2LimitMargin(primary);
-      if (best_margin >= j2_limit_avoidance_margin_) return true;
-    }
-
-    std::vector<double> base_positions;
-    command_seed_->copyJointGroupPositions(joint_group_, base_positions);
-    if (base_positions.size() != joint_names_.size()) return primary_valid;
-    const double midpoint =
-        0.5 * (bounds.min_position_ + bounds.max_position_);
-    const double direction = base_positions[1] <= midpoint ? 1.0 : -1.0;
-    bool used_reseeded_solution = false;
-
-    for (int attempt = 1; attempt <= j2_reseed_attempts_; ++attempt) {
-      std::vector<double> seed_positions = base_positions;
-      seed_positions[1] = std::max(
-          bounds.min_position_ + 1e-6,
-          std::min(bounds.max_position_ - 1e-6,
-                   base_positions[1] + direction * j2_reseed_step_ * attempt));
-      moveit::core::RobotState alternative(*command_seed_);
-      alternative.setJointGroupPositions(joint_group_, seed_positions);
-      alternative.update();
-      if (!alternative.setFromIK(joint_group_, target, tip_link_,
-                                 j2_reseed_timeout_) ||
-          !alternative.satisfiesBounds(joint_group_)) {
-        continue;
-      }
-
-      std::vector<double> alternative_positions;
-      alternative.copyJointGroupPositions(joint_group_, alternative_positions);
-      double max_delta = 0.0;
-      for (std::size_t index = 0; index < alternative_positions.size(); ++index) {
-        max_delta = std::max(
-            max_delta,
-            std::abs(alternative_positions[index] - base_positions[index]));
-      }
-      if (max_delta > j2_reseed_max_joint_delta_) continue;
-
-      const double margin = j2LimitMargin(alternative);
-      if (margin > best_margin + 1e-4) {
-        result = alternative;
-        best_margin = margin;
-        used_reseeded_solution = true;
-      }
-    }
-
-    if (used_reseeded_solution) {
-      ROS_INFO_THROTTLE(
-          1.0,
-          "J2 limit avoidance selected a continuous IK branch (margin %.1f deg)",
-          best_margin * 180.0 / 3.14159265358979323846);
-    }
-    if (primary_valid || used_reseeded_solution) return true;
-    return solveDifferentialIkFallback(target, result);
-  }
-
-  bool solveDifferentialIkFallback(const Eigen::Isometry3d& target,
-                                   moveit::core::RobotState& result) {
-    if (!differential_ik_fallback_enabled_) return false;
-    result = *command_seed_;
-    result.update();
-    const Eigen::Isometry3d current =
-        result.getGlobalLinkTransform(tip_link_);
-    const Eigen::Vector3d translation_error =
-        target.translation() - current.translation();
-    const Eigen::AngleAxisd rotation_delta(
-        target.linear() * current.linear().transpose());
-    const Eigen::Vector3d rotation_error =
-        rotation_delta.axis() * rotation_delta.angle();
-    if (!translation_error.allFinite() || !rotation_error.allFinite() ||
-        translation_error.norm() > differential_ik_max_translation_error_ ||
-        rotation_error.norm() > differential_ik_max_rotation_error_) {
-      return false;
-    }
-    if (translation_error.norm() < 1e-9 && rotation_error.norm() < 1e-9)
-      return true;
-
-    Eigen::MatrixXd jacobian;
-    const moveit::core::LinkModel* tip = robot_model_->getLinkModel(tip_link_);
-    if (!tip || !result.getJacobian(joint_group_, tip,
-                                    Eigen::Vector3d::Zero(), jacobian) ||
-        jacobian.rows() != 6) {
-      return false;
-    }
-    Eigen::VectorXd task_error(6);
-    task_error.head<3>() = translation_error;
-    task_error.tail<3>() = rotation_error;
-    Eigen::VectorXd delta;
-    try {
-      delta = rm75_touch_teleop::dampedDifferentialIkStep(
-          jacobian, task_error, differential_ik_damping_,
-          differential_ik_max_joint_step_);
-    } catch (const std::runtime_error&) {
-      return false;
-    }
-    if (delta.size() != static_cast<Eigen::Index>(joint_names_.size()) ||
-        !delta.allFinite() || delta.norm() < 1e-12) {
-      return false;
-    }
-
-    std::vector<double> positions;
-    result.copyJointGroupPositions(joint_group_, positions);
-    for (std::size_t i = 0; i < positions.size(); ++i) positions[i] += delta[i];
-    result.setJointGroupPositions(joint_group_, positions);
-    result.update();
-    if (!result.satisfiesBounds(joint_group_)) return false;
-
-    const Eigen::Isometry3d updated =
-        result.getGlobalLinkTransform(tip_link_);
-    const double before = translation_error.norm() + 0.1 * rotation_error.norm();
-    const Eigen::AngleAxisd updated_rotation(
-        target.linear() * updated.linear().transpose());
-    const double after = (target.translation() - updated.translation()).norm() +
-        0.1 * std::abs(updated_rotation.angle());
-    if (!std::isfinite(after) || after >= before - 1e-10) return false;
-    ROS_WARN_THROTTLE(1.0,
-                      "Using bounded differential IK fallback near a singular posture");
-    return true;
+    target_joint_pub_.publish(target_msg);
+    actual_joint_pub_.publish(actual_msg);
+    joint_velocity_pub_.publish(velocity_msg);
+    joint_acceleration_pub_.publish(acceleration_msg);
+    tracking_error_pub_.publish(error_msg);
   }
 
   void updateHaptic(const ros::WallTime& now) {
@@ -1110,40 +1095,46 @@ class Rm75TouchTeleop {
   ros::Subscriber touch_pose_sub_, touch_twist_sub_, joy_sub_, joint_state_sub_;
   ros::Subscriber touch_increment_sub_, touch_anchor_sub_, force_sub_;
   ros::Publisher command_pub_, rm_joint_pos_pub_, target_pub_, active_pub_;
-  ros::WallTimer timer_;
+  ros::SteadyTimer timer_;
   ros::Subscriber coordinate_sub_;
   ros::Publisher stop_pub_, mode_pub_, reason_pub_, fz_pub_, filtered_fz_pub_, force_target_pub_;
   ros::Publisher haptic_enabled_pub_, haptic_raw_pub_, haptic_filtered_pub_;
   ros::Publisher haptic_command_diag_pub_, haptic_fresh_pub_, haptic_device_command_pub_;
   ros::Publisher haptic_position_force_pub_, haptic_tracking_error_pub_;
+  ros::Publisher qp_status_pub_, qp_solve_time_pub_, control_dt_pub_;
+  ros::Publisher target_joint_pub_, actual_joint_pub_, joint_velocity_pub_;
+  ros::Publisher joint_acceleration_pub_, tracking_error_pub_;
   rm75_touch_teleop::HybridForceControl hybrid_;
   rm75_touch_teleop::HapticRenderer haptic_;
   bool hybrid_enabled_ = false, force_frame_verified_ = false, require_increment_ = false;
   bool released_since_stop_ = true, stop_latched_ = false;
   std::string force_frame_;
   Eigen::Matrix3d force_rotation_ = Eigen::Matrix3d::Identity();
-  double force_sign_ = 1.0, max_joint_tracking_error_ = 0.15, ik_failure_timeout_ = 0.25;
+  double force_sign_ = 1.0, max_joint_tracking_error_ = 0.15;
   double force_startup_grace_period_ = 0.0;
-  bool j2_limit_avoidance_enabled_ = true;
-  double j2_limit_avoidance_margin_ = 0.25;
-  double j2_reseed_step_ = 0.05;
-  double j2_reseed_timeout_ = 0.002;
-  int j2_reseed_attempts_ = 4;
-  double j2_reseed_max_joint_delta_ = 0.35;
-  bool differential_ik_fallback_enabled_ = true;
-  double differential_ik_damping_ = 0.05;
-  double differential_ik_max_joint_step_ = 0.05;
-  double differential_ik_max_translation_error_ = 0.02;
-  double differential_ik_max_rotation_error_ = 0.15;
   int expected_coordinate_ = -1, coordinate_ = -1;
-  ros::WallTime last_joy_wall_time_, last_increment_wall_time_, last_update_wall_time_;
-  ros::WallTime last_coordinate_wall_time_, ik_failure_since_, startup_wall_time_;
+  ros::WallTime last_joy_wall_time_, last_increment_wall_time_;
+  ros::SteadyTime last_control_steady_time_;
+  ros::WallTime last_coordinate_wall_time_, startup_wall_time_;
 
   std::string planning_group_, tip_link_, base_frame_, output_mode_;
   std::string touch_pose_topic_, touch_joy_topic_, joint_state_topic_, command_topic_;
   std::string force_topic_, touch_twist_topic_;
   std::vector<std::string> joint_names_;
   std::vector<double> last_command_;
+  rm75_touch_teleop::DifferentialIkConfig qp_config_;
+  rm75_touch_teleop::JointVector position_lower_ =
+      rm75_touch_teleop::JointVector::Zero();
+  rm75_touch_teleop::JointVector position_upper_ =
+      rm75_touch_teleop::JointVector::Zero();
+  rm75_touch_teleop::JointVector velocity_limit_ =
+      rm75_touch_teleop::JointVector::Zero();
+  rm75_touch_teleop::JointVector acceleration_limit_ =
+      rm75_touch_teleop::JointVector::Zero();
+  rm75_touch_teleop::JointVector last_valid_velocity_ =
+      rm75_touch_teleop::JointVector::Zero();
+  rm75_touch_teleop::JointVector posture_reference_ =
+      rm75_touch_teleop::JointVector::Zero();
   Eigen::Isometry3d latest_touch_ = Eigen::Isometry3d::Identity();
   Eigen::Isometry3d touch_anchor_ = Eigen::Isometry3d::Identity();
   Eigen::Isometry3d robot_anchor_ = Eigen::Isometry3d::Identity();
@@ -1171,8 +1162,11 @@ class Rm75TouchTeleop {
   bool have_touch_velocity_ = false;
   bool use_touch_increment_ = true, have_touch_increment_ = false;
   double metres_per_touch_unit_ = 0.001, position_scale_ = 1.0;
-  double publish_rate_ = 100.0, ik_timeout_ = 0.01, command_duration_ = 0.08;
+  double publish_rate_ = 100.0, command_duration_ = 0.08;
   double max_touch_translation_ = 0.25, max_joint_velocity_ = 0.8;
+  double max_joint_acceleration_ = 1.5;
+  double min_control_dt_ = 0.001, max_control_dt_ = 0.04;
+  double posture_reference_update_rate_ = 0.30;
   double max_z_position_travel_ = 0.0;
   double input_timeout_ = 0.15;
   double force_feedback_timeout_ = 0.25;

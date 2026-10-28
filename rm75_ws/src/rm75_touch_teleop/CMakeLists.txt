@@ -53,6 +53,11 @@ if(CATKIN_ENABLE_TESTING)
   if(TARGET damped_differential_ik_test)
     target_link_libraries(damped_differential_ik_test ${catkin_LIBRARIES})
   endif()
+  catkin_add_gtest(constrained_differential_ik_test
+                   test/constrained_differential_ik_test.cpp)
+  if(TARGET constrained_differential_ik_test)
+    target_link_libraries(constrained_differential_ik_test ${catkin_LIBRARIES})
+  endif()
 endif()
 
 install(TARGETS rm75_touch_teleop_node sampling_soil_sim_node

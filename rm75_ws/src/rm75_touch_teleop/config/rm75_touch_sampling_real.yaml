@@ -19,11 +19,20 @@ motion_enabled: false
 position_scale: 0.8
 orientation_enabled: true
 publish_rate: 50.0
-ik_timeout: 0.015
 command_duration: 0.1
 input_timeout: 0.25
 max_touch_translation: 0.08
 max_joint_velocity: 0.40
+max_joint_acceleration: 1.0
+min_control_dt: 0.001
+max_control_dt: 0.04
+max_ee_linear_velocity: 0.08
+max_ee_angular_velocity: 0.40
+qp_velocity_smoothing_weight: 0.02
+qp_posture_weight: 0.08
+posture_reference_update_rate: 0.30
+qp_soft_limit_margin: 0.20
+qp_timeout: 0.002
 
 # RM75 six-axis force version: use compensated external wrench feedback.
 force_topic: /rm_driver/UdpSixZeroForce
@@ -45,15 +54,6 @@ max_z_step: 0.0004
 max_force_travel: 0.05
 max_z_tracking_error: 0.005
 max_joint_tracking_error: 0.15
-# Keep the redundant IK solution away from J2's +/-2.268 rad hard limits.
-# Alternative seeds are accepted only when every joint remains close to the
-# previous command, so this redistributes posture without an IK branch jump.
-j2_limit_avoidance_enabled: true
-j2_limit_avoidance_margin: 0.25
-j2_reseed_step: 0.05
-j2_reseed_timeout: 0.002
-j2_reseed_attempts: 4
-j2_reseed_max_joint_delta: 0.35
 force_deadband: 1.0
 force_filter_tau: 0.03
 contact_debounce: 0.06
@@ -62,7 +62,6 @@ force_motion_sign: 1.0
 force_sign: -1.0
 force_frame: base_link
 force_frame_rotation_rpy: [0.0, 0.0, 0.0]
-ik_failure_timeout: 0.25
 require_touch_increment: true
 
 # Verified on 2026-10-04: a base +Z load produced positive World Fz, so

@@ -9,7 +9,7 @@ import rostest
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Vector3Stamped
 from sensor_msgs.msg import JointState, Joy
-from std_msgs.msg import Bool, String, Empty, UInt16, Float64MultiArray
+from std_msgs.msg import Bool, String, Empty, UInt16, Float64, Float64MultiArray
 from rm_msgs.msg import Six_Force, JointPos
 from trajectory_msgs.msg import JointTrajectory
 
@@ -26,9 +26,15 @@ class Plant:
         self.offset = [0., 0., 0.]
         self.q = [0., .8395, 0., 1.4442, 0., .8513, 0.]
         self.mode = ''
+        self.stop_reason = ''
         self.active = False
         self.commands = []
+        self.command_times = []
         self.targets = []
+        self.qp_status = ''
+        self.control_dt = []
+        self.qp_velocities = []
+        self.qp_accelerations = []
         self.stops = 0
         self.haptic_commands = []
         self.enabled = set(['pose', 'joy', 'joints', 'force', 'increment', 'coordinate'])
@@ -39,6 +45,8 @@ class Plant:
                          ('force', Six_Force), ('increment', Float64MultiArray), ('coordinate', UInt16)]:
             self.publishers[key] = rospy.Publisher('/test/'+name+'/'+key, msg, queue_size=1)
         rospy.Subscriber('/test_'+name+'/control_mode', String, lambda m: setattr(self, 'mode', m.data))
+        rospy.Subscriber('/test_'+name+'/stop_reason', String,
+                         lambda m: setattr(self, 'stop_reason', m.data))
         rospy.Subscriber('/test_'+name+'/active', Bool, lambda m: setattr(self, 'active', m.data))
         rospy.Subscriber('/test_'+name+'/target_pose', PoseStamped, lambda m: self.targets.append(m))
         rospy.Subscriber('/test/'+name+'/stop', Empty, self.stop)
@@ -47,6 +55,14 @@ class Plant:
                          self.command)
         rospy.Subscriber('/test_'+name+'/haptic_device_command', Vector3Stamped,
                          lambda m: self.haptic_commands.append(m))
+        rospy.Subscriber('/test_'+name+'/qp_status', String,
+                         lambda m: setattr(self, 'qp_status', m.data))
+        rospy.Subscriber('/test_'+name+'/control_dt', Float64,
+                         lambda m: self.control_dt.append(m.data))
+        rospy.Subscriber('/test_'+name+'/joint_velocity', Float64MultiArray,
+                         lambda m: self.qp_velocities.append(list(m.data)))
+        rospy.Subscriber('/test_'+name+'/joint_acceleration', Float64MultiArray,
+                         lambda m: self.qp_accelerations.append(list(m.data)))
 
     def stop(self, _):
         self.stops += 1
@@ -54,6 +70,7 @@ class Plant:
     def command(self, msg):
         q = list(msg.joint if self.name in ('joint', 'observe') else msg.points[0].positions)
         self.commands.append(q)
+        self.command_times.append(time.monotonic())
         if self.follow:
             self.q = q
 
@@ -175,6 +192,12 @@ class Integration(unittest.TestCase):
             # Every actually emitted command respects the original joint velocity bound.
             for a, b in zip(p.commands, p.commands[1:]):
                 self.assertLessEqual(max(abs(x-y) for x,y in zip(a,b)), .00401)
+            self.assertIn('success', p.qp_status)
+            self.assertTrue(p.control_dt)
+            self.assertLessEqual(max(max(abs(v) for v in sample)
+                                     for sample in p.qp_velocities), .20001)
+            self.assertLessEqual(max(max(abs(a) for a in sample)
+                                     for sample in p.qp_accelerations), 1.5001)
             p.force = -101.
             self.stopped(p)
             if p.name == 'joint':
@@ -200,23 +223,55 @@ class Integration(unittest.TestCase):
                 p.coordinate = 0
                 time.sleep(.12)
             self.engage(p)
-            # Far outside reachable workspace, but inside test displacement guard.
+            # A discontinuous Touch target is rate-limited instead of being
+            # handed as an unreachable full-pose request to KDL.
+            before = p.targets[-1].pose.position
+            before_xyz = (before.x, before.y, before.z)
             p.offset[0] += 3000.
-            time.sleep(.04)
-            count = len(p.commands)
-            self.stopped(p)
-            self.assertEqual(len(p.commands), count)
+            time.sleep(.15)
+            self.assertTrue(p.active)
+            after = p.targets[-1].pose.position
+            target_step = math.sqrt(sum((a-b)**2 for a,b in
+                zip((after.x, after.y, after.z), before_xyz)))
+            self.assertGreater(target_step, 0.0)
+            self.assertLessEqual(target_step, .12 * .20)
             p.offset[0] -= 3000.
             p.grey = False
         # Ordinary mode remains usable without any force publisher.
         p = self.plants[2]
         p.enabled.remove('force')
         self.engage(p)
+        # With a stationary Touch and a following RM75 model, the redundant
+        # posture must not drift after engagement.
+        still_q = list(p.q)
+        still_index = len(p.commands)
+        time.sleep(.4)
+        still_commands = p.commands[still_index:]
+        self.assertTrue(still_commands)
+        still_drift = max(max(abs(qi-q0) for qi, q0 in zip(q, still_q))
+                          for q in still_commands)
+        self.assertLess(still_drift, 1e-4)
+
+        # Touch +Y is one calibrated axis and maps to robot +Z. Exercise a
+        # complete move-stop-reverse cycle using the real RM75 MoveIt model.
+        translation_start_q = list(p.q)
+        translation_index = len(p.commands)
         z = p.targets[-1].pose.position.z
         p.offset[1] += 2.
-        time.sleep(.2)
+        self.wait(lambda: p.targets[-1].pose.position.z > z+.001)
+        time.sleep(.6)
         self.assertEqual(p.mode, 'POSITION_MODE')
         self.assertGreater(p.targets[-1].pose.position.z, z+.001)
+        translation_commands = p.commands[translation_index:]
+        self.assertTrue(translation_commands)
+        self.assertLess(max(max(abs(qi-q0) for qi, q0 in
+                                zip(q, translation_start_q))
+                            for q in translation_commands), .25)
+        self.assertLess(max(abs(v) for v in p.qp_velocities[-1]), .01)
+        p.offset[1] -= 2.
+        time.sleep(.8)
+        self.assertLess(max(abs(qi-q0) for qi, q0 in
+                            zip(p.q, translation_start_q)), .03)
         p.grey = False
         self.wait(lambda: not p.active)
 
@@ -228,6 +283,8 @@ class Integration(unittest.TestCase):
         before = p.targets[-1].pose
         before_xyz = (before.position.x, before.position.y, before.position.z)
         before_q = before.orientation
+        rotation_start_q = list(p.q)
+        rotation_index = len(p.commands)
         p.angle += .01
         time.sleep(.15)
         after = p.targets[-1].pose
@@ -237,8 +294,52 @@ class Integration(unittest.TestCase):
         self.assertLess(sum(abs(a - b) for a, b in
                             zip((after.position.x, after.position.y,
                                  after.position.z), before_xyz)), .001)
+        time.sleep(.5)
+        rotation_commands = p.commands[rotation_index:]
+        self.assertTrue(rotation_commands)
+        self.assertLess(max(max(abs(qi-q0) for qi, q0 in
+                                zip(q, rotation_start_q))
+                            for q in rotation_commands), .20)
+        self.assertLess(max(abs(v) for v in p.qp_velocities[-1]), .01)
+        p.angle -= .01
+        time.sleep(.7)
+        self.assertLess(max(abs(qi-q0) for qi, q0 in
+                            zip(p.q, rotation_start_q)), .03)
         p.white = False
         self.wait(lambda: not p.active)
+
+        # Zero joint pose is singular for the RM75 model. A small Cartesian
+        # request must remain finite, bounded and continuously accelerated.
+        p.q = [0.] * 7
+        time.sleep(.15)
+        self.engage(p)
+        singular_index = len(p.commands)
+        p.offset[2] += .5
+        time.sleep(.6)
+        self.assertTrue(p.active)
+        singular_commands = p.commands[singular_index:]
+        self.assertTrue(singular_commands)
+        self.assertLess(max(max(abs(value) for value in q)
+                            for q in singular_commands), .20)
+        self.assertLessEqual(max(max(abs(v) for v in sample)
+                                 for sample in p.qp_velocities[-40:]), .20001)
+        self.assertLessEqual(max(max(abs(a) for a in sample)
+                                 for sample in p.qp_accelerations[-40:]), 1.5001)
+        p.offset[2] -= .5
+        p.grey = False
+        self.wait(lambda: not p.active)
+
+        # The optimizer evaluates FK/J at feedback, never at the outgoing
+        # command. A blocked mock plant must trip the existing tracking guard.
+        p = self.plants[0]
+        self.engage(p)
+        p.follow = False
+        p.offset[2] += 100.
+        self.stopped(p)
+        self.assertIn('tracking error', p.stop_reason)
+        p.follow = True
+        p.offset[2] -= 100.
+        p.grey = False
         # Feature-off regression: the new haptic path emits no device command,
         # while all legacy target/trajectory assertions above still pass.
         self.assertEqual(len(p.haptic_commands), 0)
