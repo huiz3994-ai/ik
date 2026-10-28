@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "test:jog-interlock": "node --experimental-strip-types --test test/cartesian-jog-interlock.test.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",

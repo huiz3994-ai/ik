@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ArrowDown, ArrowUp, Bot, Camera, ChevronRight, CircleGauge, FileSliders, FlaskConical, FolderOpen, Gamepad2, Menu, Move3D, OctagonX, PackageCheck, Play, Plus, Power, QrCode, Radio, RefreshCw, RotateCw, Save, Server, ShieldCheck, Siren, Square, Trash2, Unplug, Waves, Waypoints } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { JointPanel, Metric, Panel, RobotTwin, StateBadge, StatusPill } from './components'
+import { CartesianJogInterlock, type JogDirection } from './cartesian-jog-interlock'
 import { api, command, useStation } from './store'
 import type { Dict, RM75Trajectory, RobotDescriptor, StationState, ToolPickConfig, TrajectoryExecution, TrajectorySummary } from './types'
 
@@ -69,7 +70,6 @@ function CartesianControl({state}:{state:StationState}) {
   return <div className="cartesian-control"><p className="muted">Link7 在 base_link 下的位姿；位置为 m，姿态为 rad。预览只计算 IK，不运动。</p><div className="preset-list">{presets.map((item,i)=><button key={i} onClick={()=>{setPose(item);void preview(item)}}>{item.name||`姿态 ${i+1}`}</button>)}</div><div className="cartesian-grid">{(['x','y','z','rx','ry','rz'] as const).map(key=><label key={key}><span>{key.toUpperCase()}</span><input type="number" step={key.startsWith('r')?0.01:0.001} value={pose[key]} onChange={e=>update(key,Number(e.target.value))}/></label>)}</div><div className="joint-actions"><button onClick={sync}>同步实际位姿</button><button disabled={busy} onClick={()=>preview()}>IK 预览</button><button className="primary" disabled={busy||!sessionReady} onClick={execute}>执行末端目标</button></div>{notice&&<p className="tool-notice">{notice}</p>}</div>
 }
 
-type JogDirection='x_plus'|'x_minus'|'y_plus'|'y_minus'|'z_plus'|'z_minus'|'rx_plus'|'rx_minus'|'ry_plus'|'ry_minus'|'rz_plus'|'rz_minus'
 const translationButtons:{direction:JogDirection;label:string;cell:string}[]=[
   {direction:'z_plus',label:'Z+',cell:'tl'},{direction:'x_plus',label:'X+',cell:'tc'},
   {direction:'z_minus',label:'Z−',cell:'tr'},{direction:'y_minus',label:'Y−',cell:'ml'},
@@ -84,45 +84,47 @@ const rotationButtons:{direction:JogDirection;label:string;cell:string}[]=[
 function CartesianJogPage({state}:{state:StationState}) {
   const {sessionReady,sessionId,connected,setError}=useStation()
   const jog=state.cartesian_jog
-  const held=useRef<JogDirection|null>(null), request=useRef(0), stopping=useRef(false)
+  const activePointer=useRef<number|null>(null),sessionRef=useRef(sessionId)
   const [localDirection,setLocalDirection]=useState<JogDirection|null>(null)
+  const [stopPending,setStopPending]=useState(false)
+  sessionRef.current=sessionId
+  const interlock=useRef<CartesianJogInterlock|null>(null)
+  if(!interlock.current)interlock.current=new CartesianJogInterlock(
+    direction=>api('/api/v1/cartesian/jog/start',{method:'POST',body:JSON.stringify({direction})}),
+    ()=>api('/api/v1/cartesian/jog/stop',{method:'POST'}),
+    (direction,stopping)=>{setLocalDirection(direction);setStopPending(stopping)},
+    (error,phase)=>{if(phase==='start'||sessionRef.current)setError(error instanceof Error?error.message:String(error))},
+  )
   const motionReady=sessionReady&&connected&&state.operator_state!=='SAFE_STOP'
-  const sendStop=useCallback(async()=>{
-    held.current=null;setLocalDirection(null)
-    if(stopping.current)return
-    stopping.current=true
-    try{await api('/api/v1/cartesian/jog/stop',{method:'POST'})}
-    catch(error){if(sessionId)setError(error instanceof Error?error.message:String(error))}
-    finally{stopping.current=false}
-  },[sessionId,setError])
+  const sendStop=useCallback(async()=>interlock.current?.release(),[])
   const start=useCallback(async(direction:JogDirection)=>{
-    if(!motionReady||held.current)return
-    held.current=direction;setLocalDirection(direction)
-    const generation=++request.current
-    try{
-      await api('/api/v1/cartesian/jog/start',{method:'POST',body:JSON.stringify({direction})})
-      if(held.current!==direction||generation!==request.current)await sendStop()
-    }catch(error){held.current=null;setLocalDirection(null);setError(error instanceof Error?error.message:String(error))}
-  },[motionReady,sendStop,setError])
+    if(!motionReady||interlock.current?.busy||!['IDLE','STOPPED'].includes(jog?.state||'IDLE'))return
+    await interlock.current?.start(direction)
+  },[jog?.state,motionReady])
   useEffect(()=>{
-    const stop=()=>{if(held.current)void sendStop()}
+    const stop=()=>{if(interlock.current?.direction)void sendStop()}
     const hidden=()=>{if(document.visibilityState!=='visible')stop()}
-    const unload=()=>{if(!held.current||!sessionId)return;fetch('/api/v1/cartesian/jog/stop',{method:'POST',keepalive:true,headers:{'X-RM75-Control-Session':sessionId}}).catch(()=>{})}
+    const unload=()=>{if(!interlock.current?.direction||!sessionId)return;fetch('/api/v1/cartesian/jog/stop',{method:'POST',keepalive:true,headers:{'X-RM75-Control-Session':sessionId}}).catch(()=>{})}
     window.addEventListener('blur',stop);window.addEventListener('pagehide',unload)
     document.addEventListener('visibilitychange',hidden)
     return()=>{window.removeEventListener('blur',stop);window.removeEventListener('pagehide',unload);document.removeEventListener('visibilitychange',hidden);unload()}
   },[sendStop,sessionId])
-  useEffect(()=>{if((!sessionReady||!connected)&&held.current){held.current=null;setLocalDirection(null)}},[sessionReady,connected])
+  useEffect(()=>{if((!sessionReady||!connected)&&interlock.current?.direction){activePointer.current=null;interlock.current.reset()}},[sessionReady,connected])
+  const releasePointer=(event:React.PointerEvent<HTMLButtonElement>)=>{
+    if(activePointer.current!==event.pointerId)return
+    activePointer.current=null
+    if(interlock.current?.direction)void sendStop()
+  }
   const handlers=(direction:JogDirection)=>({
-    onPointerDown:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);void start(direction)},
-    onPointerUp:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();void sendStop()},
-    onPointerCancel:()=>void sendStop(),onLostPointerCapture:()=>{if(held.current)void sendStop()},
+    onPointerDown:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();if(activePointer.current!==null)return;activePointer.current=event.pointerId;event.currentTarget.setPointerCapture(event.pointerId);void start(direction)},
+    onPointerUp:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();releasePointer(event)},
+    onPointerCancel:releasePointer,onLostPointerCapture:releasePointer,
     onKeyDown:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if((event.key===' '||event.key==='Enter')&&!event.repeat){event.preventDefault();void start(direction)}},
-    onKeyUp:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();void sendStop()}},
+    onKeyUp:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if((event.key===' '||event.key==='Enter')&&interlock.current?.direction){event.preventDefault();void sendStop()}},
   })
   const renderPad=(items:typeof translationButtons,rotation=false)=><div className="jog-pad">
     <div className="jog-center"><b>{rotation?'Link7':'base_link'}</b><span>{rotation?'局部旋转':'直线平移'}</span></div>
-    {items.map(item=><button key={item.direction} className={`jog-button ${item.cell} ${rotation?'rotation':''} ${item.direction.endsWith('minus')?'negative':''} ${(localDirection||jog?.direction)===item.direction?'active':''}`} disabled={!motionReady||(!!localDirection&&localDirection!==item.direction)||jog?.state==='STOPPING'} aria-label={`${rotation?'绕局部轴旋转':'沿基坐标轴平移'} ${item.label}`} {...handlers(item.direction)}>{rotation&&<RotateCw size={20}/>}<strong>{item.label}</strong></button>)}
+    {items.map(item=><button key={item.direction} className={`jog-button ${item.cell} ${rotation?'rotation':''} ${item.direction.endsWith('minus')?'negative':''} ${(localDirection||jog?.direction)===item.direction?'active':''}`} disabled={!motionReady||stopPending||(!!localDirection&&localDirection!==item.direction)||['STOPPING','LIMIT_REACHED'].includes(jog?.state||'')} aria-label={`${rotation?'绕局部轴旋转':'沿基坐标轴平移'} ${item.label}`} {...handlers(item.direction)}>{rotation&&<RotateCw size={20}/>}<strong>{item.label}</strong></button>)}
   </div>
   const pose=state.tcp||{},target=jog?.target_pose||{}
   const mm=(value:unknown)=>Number.isFinite(Number(value))?(Number(value)*1000).toFixed(2):'—'
