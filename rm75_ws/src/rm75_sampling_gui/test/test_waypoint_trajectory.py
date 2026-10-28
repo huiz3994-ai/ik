@@ -15,6 +15,7 @@ from rm75_sampling_gui.model.robot_model import JOINT_NAMES
 from rm75_sampling_gui.trajectory.interpolation import (
     evaluate_quintic,
     generate_quintic,
+    trajectory_coefficients,
 )
 from rm75_sampling_gui.trajectory.models import new_trajectory, validate_document
 from rm75_sampling_gui.trajectory.repository import TrajectoryRepository
@@ -23,6 +24,8 @@ from rm75_sampling_gui.control.joint_control_adapter import (
     JointControlAdapter,
     JointControlError,
 )
+from rm75_sampling_gui.task.task_manager import TaskManager
+from rm75_sampling_gui.state.state_machine import RobotState, StateMachine
 
 
 def _waypoints(rows):
@@ -103,6 +106,24 @@ def test_monotone_intermediate_waypoint_has_nonzero_pass_velocity_without_oversh
     assert float(positions.max()) <= 0.5 + 1e-12
 
 
+def test_dense_ros_reconstruction_preserves_original_quintic_between_samples():
+    generated = generate_quintic(
+        _waypoints([np.zeros(7), np.full(7, 0.2), np.full(7, 0.5)]),
+        _config(), np.ones(7), np.full(7, 1.5),
+    )
+    reconstructed = trajectory_coefficients(generated["points"])
+    for index, coefficients in enumerate(reconstructed):
+        stamp = generated["points"][index]["time_from_start"]
+        duration = generated["points"][index + 1]["time_from_start"] - stamp
+        segment = 0 if index < generated["waypoint_indices"][1] else 1
+        offset = sum(generated["segment_durations"][:segment])
+        actual = evaluate_quintic(coefficients, duration * 0.37)
+        expected = evaluate_quintic(generated["segment_coefficients"][segment],
+                                    stamp + duration * 0.37 - offset)
+        for derivative in ("positions", "velocities", "accelerations"):
+            np.testing.assert_allclose(actual[derivative], expected[derivative], atol=1e-8)
+
+
 def test_direction_reversal_sets_only_reversing_joint_knot_velocity_to_zero():
     rows = [
         np.zeros(7),
@@ -172,6 +193,38 @@ def test_repository_crud_overwrite_and_restart_recovery(tmp_path):
     assert restarted.delete("sampling_retreat_01") is False
     with pytest.raises(KeyError, match="sampling_retreat_01"):
         restarted.get("sampling_retreat_01")
+
+
+def test_create_duplicate_id_preserves_existing_waypoints(tmp_path):
+    service = _service(tmp_path, _feedback)
+    service.create("original", trajectory_id="same_id")
+    original = service.record_current_waypoint("same_id")
+    original_bytes = (tmp_path / "same_id.json").read_bytes()
+    with pytest.raises(RuntimeError, match="已存在"):
+        service.create("replacement", trajectory_id="same_id")
+    assert service.get("same_id") == original
+    assert (tmp_path / "same_id.json").read_bytes() == original_bytes
+
+
+def test_concurrent_repository_creation_has_exactly_one_winner(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    barrier = threading.Barrier(2)
+
+    def create(name):
+        repository = TrajectoryRepository(str(tmp_path))
+        barrier.wait(timeout=2)
+        try:
+            return repository.create(new_trajectory(name, trajectory_id="shared"))["name"]
+        except RuntimeError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(create, ["first", "second"]))
+    winners = [name for name in results if name is not None]
+    assert len(winners) == 1
+    assert TrajectoryRepository(str(tmp_path)).get("shared")["name"] == winners[0]
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_repository_isolates_malformed_json_and_reports_scan_error(tmp_path):
@@ -347,6 +400,19 @@ def test_service_generation_rejects_dense_collision_and_persists_error(tmp_path)
     assert "碰撞" in failed["trajectory_status"]["message"]
 
 
+def test_saving_unchanged_parameters_preserves_generated_trajectory(tmp_path):
+    rows = iter([_feedback(0), _feedback(10)])
+    service = _service(tmp_path, lambda: next(rows))
+    service.create("save generated", trajectory_id="save_generated")
+    service.record_current_waypoint("save_generated")
+    service.record_current_waypoint("save_generated")
+    generated = service.generate("save_generated")
+    saved = service.update_metadata("save_generated", name="renamed",
+                                    trajectory_config=generated["trajectory_config"])
+    assert saved["trajectory_status"]["state"] == "READY"
+    assert saved["trajectory"] == generated["trajectory"]
+
+
 def _trajectory_points():
     return [
         {
@@ -434,11 +500,94 @@ def test_adapter_progress_is_derived_from_nearest_actual_feedback_and_never_regr
     assert second["current_point"] == 2
 
 
+def test_feedback_progress_does_not_jump_to_closer_return_leg():
+    positions = [np.full(7, value) for value in (0, 0.1, 0.2, 0.3, 0.19, 0)]
+    outward = JointControlAdapter.feedback_progress(np.full(7, 0.19), positions)
+    assert outward["current_point"] == 2
+    turn = JointControlAdapter.feedback_progress(np.full(7, 0.3), positions, 2)
+    assert turn["current_point"] == 3
+    returning = JointControlAdapter.feedback_progress(np.full(7, 0.19), positions, 3)
+    assert returning["current_point"] == 4
+
+
+def test_feedback_progress_is_bounded_by_executable_time_even_for_duplicate_points():
+    positions = [np.zeros(7) for _ in range(10)]
+    progress = JointControlAdapter.feedback_progress(
+        np.zeros(7), positions, maximum_index=2
+    )
+    assert progress["current_point"] <= 2
+
+
+def test_cancel_during_validation_never_submits_action(monkeypatch):
+    adapter = _adapter()
+    manager = TaskManager.__new__(TaskManager)
+    manager.joint_adapter = adapter
+    manager._operation_lock = threading.RLock()
+    manager.launches = SimpleNamespace(mode=None)
+    manager.state_machine = StateMachine()
+    manager.ros = SimpleNamespace(telemetry_snapshot=_feedback)
+    entered, release = threading.Event(), threading.Event()
+    sent = []
+    result = []
+
+    def validate(*args):
+        entered.set()
+        assert release.wait(2)
+        return {"ok": True}
+
+    monkeypatch.setattr(adapter, "validate_trajectory", validate)
+    monkeypatch.setattr(adapter, "_send_trajectory_points",
+                        lambda *args, **kwargs: sent.append(True) or {"cancelled": False})
+    worker = threading.Thread(target=lambda: result.append(
+        manager.execute_trajectory(_trajectory_points())))
+    worker.start()
+    try:
+        assert entered.wait(1)
+        manager.cancel_joint_control()
+    finally:
+        release.set()
+        worker.join(2)
+    assert not worker.is_alive()
+    assert sent == []
+    assert result[0]["cancelled"] is True
+    assert manager.state_machine.state == RobotState.IDLE
+
+
+@pytest.mark.parametrize("interruption", ["adapter_cancel", "run_cancel", "start_drift"])
+def test_waiting_for_action_rechecks_cancel_and_fresh_start(monkeypatch, interruption):
+    import actionlib
+
+    adapter = _adapter()
+    cancel_event = threading.Event()
+    sent = []
+
+    def wait_for_server(_timeout):
+        if interruption == "adapter_cancel":
+            adapter.cancel()
+        elif interruption == "run_cancel":
+            cancel_event.set()
+        return True
+
+    client = SimpleNamespace(wait_for_server=wait_for_server,
+                             cancel_goal=lambda: None,
+                             send_goal=lambda goal: sent.append(goal))
+    monkeypatch.setattr(actionlib, "SimpleActionClient", lambda *args: client)
+    if interruption == "start_drift":
+        with pytest.raises(JointControlError, match="起点"):
+            adapter.execute_trajectory(_trajectory_points(), lambda: _feedback(20))
+    else:
+        result = adapter.execute_trajectory(_trajectory_points(), _feedback,
+                                            cancel_event=cancel_event)
+        assert result["cancelled"] is True
+    assert sent == []
+    assert adapter.active is False
+
+
 def test_service_executes_by_id_updates_progress_from_executor_and_stops(tmp_path):
     started = threading.Event()
     cancelled = threading.Event()
 
-    def executor(points, callback):
+    def executor(points, callback, cancel_event):
         callback({
             "current_point": 1, "total_points": len(points),
             "progress": 0.5, "max_error_rad": 0.001,
@@ -468,6 +617,10 @@ def test_service_executes_by_id_updates_progress_from_executor_and_stops(tmp_pat
     assert running["total_points"] == len(generated["trajectory"])
     with pytest.raises(RuntimeError, match="执行中"):
         service.delete("execute_by_id")
+    with pytest.raises(RuntimeError, match="执行中"):
+        service.save(generated)
+    with pytest.raises(RuntimeError, match="执行中"):
+        service.generate("execute_by_id")
 
     stopped = service.stop()
     assert stopped["cancel_requested"] is True

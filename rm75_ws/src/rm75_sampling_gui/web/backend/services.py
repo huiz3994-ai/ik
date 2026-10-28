@@ -20,6 +20,7 @@ from rm75_sampling_gui.state.state_machine import RobotState, StateMachine
 from rm75_sampling_gui.task.task_manager import TaskManager
 from rm75_sampling_gui.trajectory.repository import TrajectoryRepository
 from rm75_sampling_gui.trajectory.service import TrajectoryService
+from rm75_sampling_gui.trajectory.interpolation import trajectory_coefficients, evaluate_quintic
 from .session import ControlSessionManager
 from .hardware import SamplingHardware
 from .tool5_drill import ACTIVE_STATES, Tool5DrillWorkflow
@@ -129,7 +130,6 @@ class WebRuntime:
         self._last_snapshot: Dict[str, Any] = {}
         self._offline_started = time.monotonic()
         self._simulation_lock = threading.RLock()
-        self._simulation_trajectory_cancel = threading.Event()
         self._control_path_lock = threading.RLock()
         self._cartesian_exit_stop_attempted = False
         # A collision-free, non-singular posture captured by the existing
@@ -379,11 +379,15 @@ class WebRuntime:
 
     def _execute_trajectory_points(
         self, points: List[Dict[str, Any]], progress_callback: Any,
+        cancel_event: threading.Event,
     ) -> Dict[str, Any]:
         if self.simulation:
             positions = [np.asarray(point["positions"], dtype=float) for point in points]
             times = [float(point["time_from_start"]) for point in points]
+            coefficients = trajectory_coefficients(points)
             with self._simulation_lock:
+                if cancel_event.is_set():
+                    return {"cancelled": True, "status": "CANCELLED_BEFORE_SEND"}
                 if self._simulation_operator_state == RobotState.SAFE_STOP.value:
                     raise RuntimeError("SIMULATION SAFE_STOP已锁存，必须先恢复")
                 start_error = float(np.max(np.abs(
@@ -394,22 +398,23 @@ class WebRuntime:
                     raise RuntimeError(
                         "当前关节与轨迹起点误差{:.4f}rad过大".format(start_error)
                     )
-                self._simulation_trajectory_cancel.clear()
                 self._simulation_operator_state = RobotState.JOINT_CONTROL.value
                 self._simulation_stop_reason = ""
             started = time.monotonic()
             progress_index = 0
             try:
                 while True:
-                    if self._simulation_trajectory_cancel.is_set():
+                    if cancel_event.is_set():
                         with self._simulation_lock:
                             self._simulation_target = self._simulation_joints.copy()
-                            self._simulation_operator_state = RobotState.IDLE.value
+                            if self._simulation_operator_state != RobotState.SAFE_STOP.value:
+                                self._simulation_operator_state = RobotState.IDLE.value
                         return {"cancelled": True, "status": "PREEMPTED"}
                     if not self.sessions.snapshot().get("active"):
                         with self._simulation_lock:
                             self._simulation_target = self._simulation_joints.copy()
-                            self._simulation_operator_state = RobotState.IDLE.value
+                            if self._simulation_operator_state != RobotState.SAFE_STOP.value:
+                                self._simulation_operator_state = RobotState.IDLE.value
                             self._simulation_stop_reason = "web control lease expired"
                         return {"cancelled": True, "status": "LEASE_EXPIRED"}
                     elapsed = time.monotonic() - started
@@ -418,24 +423,30 @@ class WebRuntime:
                         len(points) - 2,
                     )
                     interval = max(1e-9, times[segment + 1] - times[segment])
-                    ratio = min(1.0, max(0.0, (elapsed - times[segment]) / interval))
-                    desired = positions[segment] + ratio * (
-                        positions[segment + 1] - positions[segment]
-                    )
+                    local_time = min(interval, max(0.0, elapsed - times[segment]))
+                    desired = evaluate_quintic(coefficients[segment], local_time)["positions"]
                     with self._simulation_lock:
+                        if self._simulation_operator_state == RobotState.SAFE_STOP.value:
+                            self._simulation_target = self._simulation_joints.copy()
+                            return {"cancelled": True, "status": "SAFE_STOP"}
+                        if cancel_event.is_set():
+                            continue
                         self._simulation_target = desired
                         feedback = self._simulation_snapshot()
                         actual = np.asarray(
                             [feedback["joints"][name] for name in JOINT_NAMES], dtype=float
                         )
                     progress = self.joint_adapter.feedback_progress(
-                        actual, positions, progress_index
+                        actual, positions, progress_index,
+                        int(np.searchsorted(times, elapsed, side="right") - 1),
                     )
                     progress_index = int(progress["current_point"])
                     progress_callback(progress)
                     final_error = float(np.max(np.abs(actual - positions[-1])))
                     if elapsed >= times[-1] and final_error <= 0.01:
                         with self._simulation_lock:
+                            if cancel_event.is_set() or self._simulation_operator_state == RobotState.SAFE_STOP.value:
+                                continue
                             self._simulation_target = positions[-1].copy()
                             self._simulation_operator_state = RobotState.IDLE.value
                         return {"cancelled": False, "status": "SUCCEEDED",
@@ -453,12 +464,11 @@ class WebRuntime:
             raise RuntimeError("OFFLINE模式禁止执行轨迹")
         return self._run_on_control_path(
             "joint_control", ("base",),
-            lambda: self.tasks.execute_trajectory(points, progress_callback),
+            lambda: self.tasks.execute_trajectory(points, progress_callback, cancel_event),
         )
 
     def _stop_trajectory_execution(self) -> Dict[str, Any]:
         if self.simulation:
-            self._simulation_trajectory_cancel.set()
             with self._simulation_lock:
                 self._simulation_target = self._simulation_joints.copy()
             return {"cancel_requested": True, "simulation": True}
@@ -1472,6 +1482,8 @@ class WebRuntime:
             "emergency_stop", "recover", "select_tool", "set_voltage"})
         if name not in allowed:
             raise ValueError("不允许的命令：{}".format(name))
+        if name in {"emergency_stop", "cancel_joints"}:
+            self.trajectories.stop()
         with self._simulation_lock:
             if name == "emergency_stop":
                 self._simulation_target = self._simulation_joints.copy()

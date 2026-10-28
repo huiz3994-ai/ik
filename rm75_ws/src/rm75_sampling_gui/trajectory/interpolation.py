@@ -56,7 +56,7 @@ def _knot_velocities(positions: np.ndarray, durations: np.ndarray) -> np.ndarray
     return velocities
 
 
-def _coefficients(
+def quintic_coefficients(
     start: np.ndarray,
     end: np.ndarray,
     start_velocity: np.ndarray,
@@ -112,13 +112,46 @@ def _segments(positions: np.ndarray, durations: np.ndarray) -> List[np.ndarray]:
     velocities = _knot_velocities(positions, durations)
     accelerations = np.zeros_like(positions)
     return [
-        _coefficients(
+        quintic_coefficients(
             positions[index], positions[index + 1],
             velocities[index], velocities[index + 1],
             accelerations[index], accelerations[index + 1], durations[index],
         )
         for index in range(len(durations))
     ]
+
+
+def trajectory_coefficients(points: Sequence[Dict[str, Any]]) -> List[np.ndarray]:
+    """Reconstruct each quintic from stored position/velocity/acceleration.
+
+    Dense samples from one polynomial reconstruct that same polynomial, so the
+    action server and simulator preserve both taught knots and C2 continuity.
+    """
+    result = []
+    for start, end in zip(points, points[1:]):
+        duration = float(end["time_from_start"]) - float(start["time_from_start"])
+        if not math.isfinite(duration) or duration <= 0.0:
+            raise ValueError("轨迹时间必须严格递增")
+        result.append(quintic_coefficients(
+            _vector(start["positions"], "positions"), _vector(end["positions"], "positions"),
+            _vector(start["velocities"], "velocities"), _vector(end["velocities"], "velocities"),
+            _vector(start["accelerations"], "accelerations"),
+            _vector(end["accelerations"], "accelerations"), duration,
+        ))
+    return result
+
+
+def segment_check_times(coefficients: np.ndarray, duration: float) -> List[float]:
+    """Include exact position/velocity/acceleration extrema and 20 ms samples."""
+    stamps = set(np.linspace(0.0, duration, max(2, int(math.ceil(duration / 0.02)) + 1)))
+    for joint in range(7):
+        polynomial = coefficients[:, joint]
+        for _ in range(3):
+            polynomial = np.polynomial.polynomial.polyder(polynomial)
+            for root in np.polynomial.polynomial.polyroots(polynomial):
+                if abs(root.imag) < 1e-9 and 0.0 < root.real < duration:
+                    stamps.add(float(root.real))
+    return sorted(stamps)
 
 
 def _sample_maxima(segments: List[np.ndarray], durations: np.ndarray, period: float) -> Dict[str, np.ndarray]:

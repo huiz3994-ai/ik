@@ -70,6 +70,13 @@ Web 导航中的“路径示教”按操作员点击逐个记录新鲜 `/joint_s
 `TaskManager → JointControlAdapter → /rm75_sampling_gui/follow_joint_trajectory`，进度由实际
 关节反馈匹配密集轨迹得到；停止、控制租约、SAFE_STOP 和竞争命令源保护保持不变。
 
+受控 Action 服务与 SIMULATION 都使用保存的速度、加速度重建同一分段五次多项式，保留
+结点通过速度；旧的仅位置 Action 仍兼容。进度从当前段沿实际反馈匹配，时间只限制可匹配的
+上界，避免回返轨迹跳到未来段。停止事件贯穿排队、校验、Action 等待和执行阶段。
+创建时重复 ID 返回冲突，不会覆盖已有路径；覆盖保存使用修改接口，参数未变化时保留 READY。
+参数尚未保存或重新生成时，页面禁止执行旧轨迹。
+验收命令、审查修复与实际结果见 [轨迹验收记录](docs/web/WAYPOINT_TRAJECTORY_VALIDATION.md)。
+
 “五工具配置”页可编辑 Tool1–Tool5 的绝对 `base_link → Link7` 位姿（位置 m、固定轴
 XYZ RPY rad）和垂直抬升高度，并原子持久化到 `config/tools.yaml`。确认执行前必须先通过
 MoveIt Dry Run；执行顺序为预抓取 `Z+H`、保持姿态严格沿基坐标 Z 下降、现有 24V 取物

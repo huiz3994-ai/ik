@@ -103,6 +103,43 @@ class GuardedServerPreflightTest(unittest.TestCase):
         self.assertEqual(options["max_tracking_error_rad"], 0.05)
         self.assertNotIn("max_single_delta_rad", options)
 
+    def test_derivative_trajectory_uses_quintic_not_linear_commands(self):
+        goal = FollowJointTrajectoryGoal()
+        goal.trajectory.joint_names = list(JOINT_NAMES)
+        for stamp, position, velocity in ((0, 0, 0), (2, 0.2, 0.1), (4, 0.4, 0)):
+            point = JointTrajectoryPoint()
+            point.positions = [position] * 7
+            point.velocities = [velocity] * 7
+            point.accelerations = [0.0] * 7
+            point.time_from_start = rospy.Duration.from_sec(stamp)
+            goal.trajectory.points.append(point)
+        server = self.server()
+        with patch("rosnode.get_node_names", return_value=[]), \
+                patch("rospy.wait_for_service"), \
+                patch("rospy.ServiceProxy", return_value=lambda req: SimpleNamespace(valid=True)):
+            positions, times = server._preflight(goal)
+        q, dq = server._desired(positions, times, 1, 0.5)
+        self.assertFalse(np.allclose(q, np.full(7, 0.05)))
+        q_left, dq_left = server._desired(positions, times, 1, 2.0)
+        q_right, dq_right = server._desired(positions, times, 2, 2.0)
+        np.testing.assert_allclose(q_left, np.full(7, 0.2), atol=1e-12)
+        np.testing.assert_allclose(q_left, q_right, atol=1e-12)
+        np.testing.assert_allclose(dq_left, np.full(7, 0.1), atol=1e-12)
+        np.testing.assert_allclose(dq_left, dq_right, atol=1e-12)
+
+    def test_incomplete_or_unsafe_derivatives_are_rejected(self):
+        for unsafe in ([float("nan")] * 7, [100.0] * 7, [0.0] * 6):
+            goal = self.goal()
+            for point in goal.trajectory.points:
+                point.velocities = [0.0] * 7
+                point.accelerations = [0.0] * 7
+            goal.trajectory.points[1].velocities = unsafe
+            with patch("rosnode.get_node_names", return_value=[]), \
+                    patch("rospy.wait_for_service"), \
+                    patch("rospy.ServiceProxy", return_value=lambda req: SimpleNamespace(valid=True)):
+                with self.assertRaisesRegex((RuntimeError, ValueError), "derivative|velocity|有限"):
+                    self.server()._preflight(goal)
+
 
 if __name__ == "__main__":
     unittest.main()

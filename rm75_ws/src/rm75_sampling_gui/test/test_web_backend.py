@@ -357,7 +357,7 @@ def test_trajectory_api_crud_twenty_points_generation_id_execution_and_stop(tmp_
     cancel = threading.Event()
     started = threading.Event()
 
-    def executor(points, callback):
+    def executor(points, callback, cancel_event):
         callback({"current_point": 1, "total_points": len(points),
                   "progress": 0.25, "max_error_rad": 0.002})
         started.set()
@@ -392,6 +392,11 @@ def test_trajectory_api_crud_twenty_points_generation_id_execution_and_stop(tmp_
         ).json()
         assert len(document["waypoints"]) == 20
         assert document["trajectory_status"]["state"] == "STALE"
+        duplicate = client.post("/api/v1/trajectories", headers=headers, json={
+            "name": "must not replace", "trajectory_id": "sampling_retreat_01",
+        })
+        assert duplicate.status_code == 409
+        assert client.get("/api/v1/trajectories/sampling_retreat_01").json() == document
 
         generated = client.post(
             "/api/v1/trajectories/sampling_retreat_01/generate", headers=headers
@@ -506,7 +511,8 @@ def test_simulation_saved_trajectory_executor_tracks_feedback_to_completion(tmp_
         runtime.close()
 
 
-def test_simulation_saved_trajectory_stops_when_control_lease_is_lost(tmp_path):
+@pytest.mark.parametrize("stop_mode", ["lease_loss", "emergency_stop", "before_executor"])
+def test_simulation_saved_trajectory_stops_when_control_lease_is_lost(tmp_path, stop_mode):
     package = Path(__file__).resolve().parents[1]
     config = load_web_configuration(str(package / "config/gui.yaml"),
                                     str(package / "config/tools.yaml"))
@@ -533,10 +539,25 @@ def test_simulation_saved_trajectory_stops_when_control_lease_is_lost(tmp_path):
             "trajectory_point_count": 2, "duration_s": 2.0,
         })
         runtime.trajectories.save(document)
+        entered, release = threading.Event(), threading.Event()
+        if stop_mode == "before_executor":
+            original_executor = runtime.trajectories.executor
+            def delayed_executor(*args):
+                entered.set()
+                assert release.wait(2)
+                return original_executor(*args)
+            runtime.trajectories.executor = delayed_executor
         runtime.trajectories.execute("lease_loss")
-        time.sleep(0.05)
-
-        runtime.sessions.release(lease["session_id"], "lease-loss-socket")
+        if stop_mode == "before_executor":
+            assert entered.wait(1)
+            runtime.trajectories.stop()
+            release.set()
+        elif stop_mode == "emergency_stop":
+            time.sleep(0.05)
+            runtime._simulation_command("emergency_stop", {})
+        else:
+            time.sleep(0.05)
+            runtime.sessions.release(lease["session_id"], "lease-loss-socket")
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             status = runtime.trajectories.execution_status()
@@ -545,7 +566,10 @@ def test_simulation_saved_trajectory_stops_when_control_lease_is_lost(tmp_path):
             time.sleep(0.02)
 
         assert status["state"] == "CANCELLED"
-        assert runtime.snapshot()["operator_state"] == "IDLE"
+        assert runtime.snapshot()["operator_state"] == (
+            "SAFE_STOP" if stop_mode == "emergency_stop" else "IDLE")
+        if stop_mode == "before_executor":
+            assert runtime.snapshot()["joints"]["joint1"] == pytest.approx(start[0])
     finally:
         runtime.close()
 

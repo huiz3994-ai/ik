@@ -23,7 +23,7 @@ class TrajectoryService:
         collision_checker: Optional[Callable[[Iterable[float]], bool]] = None,
         collision_required: bool = True,
         joint_limit_margin_rad: float = 0.0,
-        executor: Optional[Callable[[List[Dict[str, Any]], Callable[[Dict[str, Any]], None]], Dict[str, Any]]] = None,
+        executor: Optional[Callable[[List[Dict[str, Any]], Callable[[Dict[str, Any]], None], threading.Event], Dict[str, Any]]] = None,
         stop_executor: Optional[Callable[[], Dict[str, Any]]] = None,
     ) -> None:
         self.repository = repository
@@ -40,7 +40,7 @@ class TrajectoryService:
         self.stop_executor = stop_executor
         self._lock = threading.RLock()
         self._execution_thread: Optional[threading.Thread] = None
-        self._cancel_requested = False
+        self._cancel_event = threading.Event()
         self._active_waypoint_indices: List[int] = []
         self._execution: Dict[str, Any] = {
             "state": "IDLE", "trajectory_id": None, "message": "待机",
@@ -61,10 +61,11 @@ class TrajectoryService:
     ) -> Dict[str, Any]:
         with self._lock:
             document = new_trajectory(name, trajectory_id=trajectory_id, tool_id=tool_id)
-            return self.repository.save(document)
+            return self.repository.create(document)
 
     def save(self, document: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
+            self._require_mutable(document["trajectory_id"])
             return self.repository.save(document)
 
     def delete(self, trajectory_id: str) -> bool:
@@ -211,8 +212,11 @@ class TrajectoryService:
             if name is not None:
                 document["name"] = str(name).strip()
             if trajectory_config is not None:
+                changed_generation_input = any(
+                    document["trajectory_config"].get(key) != value
+                    for key, value in trajectory_config.items()
+                )
                 document["trajectory_config"].update(dict(trajectory_config))
-                changed_generation_input = True
             if tool_id is not Ellipsis:
                 document["tool_id"] = None if tool_id is None else str(tool_id)
             if changed_generation_input:
@@ -221,6 +225,8 @@ class TrajectoryService:
 
     def generate(self, trajectory_id: str) -> Dict[str, Any]:
         with self._lock:
+            if self._execution.get("state") == "EXECUTING":
+                raise RuntimeError("轨迹执行中，禁止生成轨迹以免阻塞停止请求")
             self._require_mutable(trajectory_id)
             document = self.repository.get(trajectory_id)
             if len(document["waypoints"]) < 2:
@@ -314,7 +320,9 @@ class TrajectoryService:
             ))
             if len(waypoint_indices) != len(document["waypoints"]):
                 raise RuntimeError("轨迹缺少示教点索引，需要重新生成")
-            self._cancel_requested = False
+            # One event per accepted run: stopping before the worker starts or
+            # during validation must survive every downstream execution entry.
+            self._cancel_event = threading.Event()
             self._active_waypoint_indices = waypoint_indices
             self._execution = {
                 "state": "EXECUTING", "trajectory_id": trajectory_id,
@@ -329,7 +337,7 @@ class TrajectoryService:
             points = copy.deepcopy(document["trajectory"])
             self._execution_thread = threading.Thread(
                 target=self._execution_worker,
-                args=(trajectory_id, points),
+                args=(trajectory_id, points, self._cancel_event),
                 name="rm75-trajectory-execution",
                 daemon=True,
             )
@@ -337,14 +345,15 @@ class TrajectoryService:
             return {"accepted": True, **copy.deepcopy(self._execution)}
 
     def _execution_worker(
-        self, trajectory_id: str, points: List[Dict[str, Any]],
+        self, trajectory_id: str, points: List[Dict[str, Any]], cancel_event: threading.Event,
     ) -> None:
         state = "ERROR"
         message = "轨迹执行失败"
         error_text = ""
         try:
-            result = self.executor(points, self._progress) if self.executor else {}
-            cancelled = bool(result.get("cancelled")) or self._cancel_requested
+            result = (self.executor(points, self._progress, cancel_event)
+                      if self.executor and not cancel_event.is_set() else {"cancelled": True})
+            cancelled = bool(result.get("cancelled")) or cancel_event.is_set()
             state = "CANCELLED" if cancelled else "COMPLETED"
             message = "轨迹执行已停止" if cancelled else "轨迹执行完成"
         except Exception as error:
@@ -368,6 +377,8 @@ class TrajectoryService:
         with self._lock:
             if self._execution.get("state") != "EXECUTING":
                 return {"cancel_requested": False, "state": self._execution.get("state")}
-            self._cancel_requested = True
-        result = self.stop_executor() if self.stop_executor is not None else {"cancel_requested": True}
-        return {"cancel_requested": True, **(result or {})}
+            self._cancel_event.set()
+            # Keep the run reserved until stop has been dispatched, otherwise a
+            # delayed stop could cancel a newly accepted run.
+            result = self.stop_executor() if self.stop_executor is not None else {"cancel_requested": True}
+            return {"cancel_requested": True, **(result or {})}

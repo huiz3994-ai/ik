@@ -299,7 +299,8 @@ function TrajectoryPage({state}:{state:StationState}) {
   const execute=()=>perform('execute',async()=>{if(!document)throw new Error('请先加载路径');await api(`/api/v1/trajectories/${document.trajectory_id}/execute`,{method:'POST'});setNotice('轨迹已进入既有七轴受控执行链')})
   const stop=()=>perform('stop',async()=>{await api('/api/v1/trajectories/execution/stop',{method:'POST'});setNotice('已请求停止，等待控制器确认')})
   const selectedIndex=document?.waypoints.findIndex(item=>item.waypoint_id===selected)??-1
-  const ready=document?.trajectory_status.state==='READY'||document?.trajectory_status.state==='COMPLETED'||document?.trajectory_status.state==='CANCELLED'
+  const parametersChanged=!!document&&(speed!==document.trajectory_config.speed_scale||acceleration!==document.trajectory_config.acceleration_scale)
+  const ready=!parametersChanged&&!!document&&['READY','COMPLETED','CANCELLED'].includes(document.trajectory_status.state)
   const percent=Math.round((execution.progress||0)*100)
   return <div className="page-grid trajectory-page">
     <Panel title="RM75 路径示教" eyebrow="MANUAL WAYPOINT TEACHING" className="span-2">
@@ -311,7 +312,7 @@ function TrajectoryPage({state}:{state:StationState}) {
       <label className="trajectory-range"><span>速度比例 <b>{Math.round(speed*100)}%</b></span><input type="range" min="0.05" max="1" step="0.05" value={speed} onChange={event=>setSpeed(Number(event.target.value))}/></label>
       <label className="trajectory-range"><span>加速度比例 <b>{Math.round(acceleration*100)}%</b></span><input type="range" min="0.05" max="1" step="0.05" value={acceleration} onChange={event=>setAcceleration(Number(event.target.value))}/></label>
       <button className="primary full" disabled={!sessionReady||!!busy||(document?.waypoints.length||0)<2} onClick={generate}>{busy==='generate'?<RefreshCw className="spin"/>:<Waypoints/>}生成平滑轨迹</button>
-      <div className={`trajectory-state ${document?.trajectory_status.state.toLowerCase()||'empty'}`}><b>{document?.trajectory_status.state||'EMPTY'}</b><span>{document?.trajectory_status.message||'创建路径后开始示教'}</span><small>采样周期 {document?.trajectory_config.sample_period_s||.02} s · 分段五次 C2</small></div>
+      <div className={`trajectory-state ${document?.trajectory_status.state.toLowerCase()||'empty'}`}><b>{document?.trajectory_status.state||'EMPTY'}</b><span>{parametersChanged?'参数已修改，请重新生成后执行':document?.trajectory_status.message||'创建路径后开始示教'}</span><small>采样周期 {document?.trajectory_config.sample_period_s||.02} s · 分段五次 C2</small></div>
     </Panel>
     <Panel title="轨迹管理" eyebrow="ATOMIC JSON RESOURCE" className="span-2">
       <div className="trajectory-library"><select value={loadId} onChange={event=>setLoadId(event.target.value)}><option value="">选择已保存路径</option>{library.map(item=><option key={item.trajectory_id} value={item.trajectory_id}>{item.name} · {item.waypoint_count}点 · {item.state}</option>)}</select><button disabled={!!busy||!loadId} onClick={loadPath}><FolderOpen/>加载路径</button><button className="primary" disabled={!sessionReady||!!busy||!name.trim()} onClick={savePath}><Save/>保存路径</button><button className="danger-button" disabled={!sessionReady||!!busy||!document} onClick={deletePath}><Trash2/>删除路径</button></div>

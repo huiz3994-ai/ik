@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 import numpy as np
 
 from rm75_sampling_gui.model.robot_model import JOINT_NAMES, RM75RobotModel
+from rm75_sampling_gui.trajectory.interpolation import evaluate_quintic, quintic_coefficients
 
 
 LOG = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class JointControlAdapter:
         self._graph_checker = graph_checker
         self._ticket: Optional[_Ticket] = None
         self._cancel = threading.Event()
+        self._cancel_generation = 0
         self._active = False
         self._lock = threading.RLock()
         self._action_client = None
@@ -77,6 +79,11 @@ class JointControlAdapter:
     def active(self) -> bool:
         with self._lock:
             return self._active
+
+    @property
+    def cancel_generation(self) -> int:
+        with self._lock:
+            return self._cancel_generation
 
     @property
     def armed(self) -> bool:
@@ -369,8 +376,13 @@ class JointControlAdapter:
     @staticmethod
     def feedback_progress(
         actual: Iterable[float], positions: Sequence[np.ndarray], minimum_index: int = 0,
+        maximum_index: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Map actual feedback to a monotonic nearest dense point."""
+        """Follow the first local distance minimum on the current path leg.
+
+        Execution time only caps eligible samples; actual feedback determines
+        advancement. A global nearest point can jump to a future return leg.
+        """
 
         actual_vector = np.asarray(tuple(actual), dtype=float)
         if actual_vector.shape != (7,) or not np.isfinite(actual_vector).all():
@@ -378,14 +390,22 @@ class JointControlAdapter:
         if not positions:
             raise JointControlError("轨迹位置为空")
         start = max(0, min(int(minimum_index), len(positions) - 1))
-        errors = [float(np.max(np.abs(np.asarray(value) - actual_vector)))
-                  for value in positions[start:]]
-        index = start + int(np.argmin(errors))
+        end = len(positions) - 1 if maximum_index is None else min(
+            len(positions) - 1, max(start, int(maximum_index)))
+        index = start
+        error = float(np.max(np.abs(np.asarray(positions[start]) - actual_vector)))
+        for candidate in range(start + 1, end + 1):
+            candidate_error = float(np.max(np.abs(
+                np.asarray(positions[candidate]) - actual_vector)))
+            same_position = np.array_equal(positions[candidate], positions[candidate - 1])
+            if candidate_error >= error and not same_position:
+                break
+            index, error = candidate, candidate_error
         return {
             "current_point": index,
             "total_points": len(positions),
             "progress": float(index) / float(max(1, len(positions) - 1)),
-            "max_error_rad": errors[index - start],
+            "max_error_rad": error,
         }
 
     def validate_trajectory(
@@ -479,15 +499,22 @@ class JointControlAdapter:
         points: Sequence[Dict[str, Any]],
         snapshot_provider: Callable[[], Dict[str, Any]],
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
+        cancel_generation: Optional[int] = None,
     ) -> Dict[str, Any]:
         self._trajectory_arrays(points)
         with self._lock:
             if self._active:
                 raise JointControlError("关节控制已经在执行")
+            if ((cancel_event is not None and cancel_event.is_set()) or
+                    (cancel_generation is not None and
+                     cancel_generation != self._cancel_generation)):
+                return {"cancelled": True, "status": "CANCELLED_BEFORE_SEND"}
             self._active = True
             self._cancel.clear()
         try:
-            return self._send_trajectory_points(points, snapshot_provider, progress_callback)
+            return self._send_trajectory_points(
+                points, snapshot_provider, progress_callback, cancel_event)
         finally:
             with self._lock:
                 self._active = False
@@ -525,11 +552,17 @@ class JointControlAdapter:
         times: List[float],
         snapshot_provider: Callable[[], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        points = [
-            {"positions": values.tolist(), "velocities": [0.0] * 7,
-             "accelerations": [0.0] * 7, "time_from_start": stamp}
-            for values, stamp in zip(positions, times)
-        ]
+        coefficients = quintic_coefficients(
+            positions[0], positions[-1], np.zeros(7), np.zeros(7),
+            np.zeros(7), np.zeros(7), times[-1],
+        )
+        points = []
+        for values, stamp in zip(positions, times):
+            sample = evaluate_quintic(coefficients, stamp)
+            points.append({"positions": values.tolist(),
+                           "velocities": sample["velocities"].tolist(),
+                           "accelerations": sample["accelerations"].tolist(),
+                           "time_from_start": stamp})
         return self._send_trajectory_points(points, snapshot_provider)
 
     def _send_trajectory_points(
@@ -537,6 +570,7 @@ class JointControlAdapter:
         points: Sequence[Dict[str, Any]],
         snapshot_provider: Callable[[], Dict[str, Any]],
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> Dict[str, Any]:
         import actionlib
         import rospy
@@ -554,13 +588,22 @@ class JointControlAdapter:
             raise JointControlError("七轴受控Action不可用：{}".format(action_name))
         goal = FollowJointTrajectoryGoal()
         goal.trajectory = self.to_joint_trajectory(points)
-        client.send_goal(goal)
+        # Validation and action discovery can take seconds. Re-read feedback,
+        # and serialize the final cancellation check with goal submission.
+        with self._lock:
+            if self._cancel.is_set() or (cancel_event is not None and cancel_event.is_set()):
+                return {"cancelled": True, "status": "CANCELLED_BEFORE_SEND"}
+            actual = self._actual(snapshot_provider())
+            if float(np.max(np.abs(actual - positions[0]))) > self._option(
+                    "trajectory_start_tolerance_rad", 0.05):
+                raise JointControlError("发送前当前关节已偏离轨迹起点，拒绝执行")
+            client.send_goal(goal)
         started = time.monotonic()
         next_source_check = started
         progress_index = 0
         deadline = time.monotonic() + times[-1] + self._option("result_timeout_s", 5.0)
         while time.monotonic() < deadline:
-            if self._cancel.is_set():
+            if self._cancel.is_set() or (cancel_event is not None and cancel_event.is_set()):
                 client.cancel_goal()
                 if not client.wait_for_result(rospy.Duration(
                         self._option("cancel_timeout_s", 4.0))):
@@ -577,7 +620,8 @@ class JointControlAdapter:
                     self.ros.emergency_stop()
                 raise JointControlError("执行期间关节反馈丢失，已停止")
             actual = self._actual(snapshot)
-            progress = self.feedback_progress(actual, positions, progress_index)
+            eligible = int(np.searchsorted(times, time.monotonic() - started, side="right") - 1)
+            progress = self.feedback_progress(actual, positions, progress_index, eligible)
             progress_index = int(progress["current_point"])
             if progress_callback is not None:
                 progress_callback(progress)
@@ -633,8 +677,10 @@ class JointControlAdapter:
         return {"cancelled": False, "max_error_rad": error, "status": "SUCCEEDED"}
 
     def cancel(self) -> Dict[str, Any]:
-        self._cancel.set()
-        client = self._action_client
+        with self._lock:
+            self._cancel_generation += 1
+            self._cancel.set()
+            client = self._action_client
         if client is not None:
             try:
                 client.cancel_goal()

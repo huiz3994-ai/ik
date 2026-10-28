@@ -390,12 +390,16 @@ class TaskManager:
 
     def execute_trajectory(
         self, points: List[Dict[str, Any]], progress_callback: Any = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> Dict[str, Any]:
         """Validate and execute a pre-generated dense path through the guarded action."""
 
         if self.joint_adapter is None:
             raise TaskManagerError("关节控制适配器未加载")
+        cancel_generation = self.joint_adapter.cancel_generation
         with self._operation_lock:
+            if cancel_event is not None and cancel_event.is_set():
+                return {"cancelled": True, "status": "CANCELLED_BEFORE_VALIDATION"}
             self._ensure_not_safe_stop()
             if self.launches.mode is not None:
                 raise TaskManagerError("Touch或力控正在占用机械臂")
@@ -405,6 +409,10 @@ class TaskManager:
                 self.state_machine.state,
                 self.control_mode,
             )
+            if ((cancel_event is not None and cancel_event.is_set()) or
+                    cancel_generation != self.joint_adapter.cancel_generation):
+                return {"cancelled": True, "status": "CANCELLED_DURING_VALIDATION"}
+            self._ensure_not_safe_stop()
             if not validation.get("ok"):
                 failures = [
                     str(item.get("detail", item.get("name", "检查失败")))
@@ -418,7 +426,8 @@ class TaskManager:
                     RobotState.JOINT_CONTROL, "开始执行示教轨迹"
                 )
                 result = self.joint_adapter.execute_trajectory(
-                    points, self.ros.telemetry_snapshot, progress_callback
+                    points, self.ros.telemetry_snapshot, progress_callback,
+                    cancel_event, cancel_generation,
                 )
                 reason = "示教轨迹已停止" if result.get("cancelled") else "示教轨迹执行结束"
                 self.state_machine.transition(RobotState.IDLE, reason)

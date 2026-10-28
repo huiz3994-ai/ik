@@ -48,6 +48,23 @@ topic”“调用任意 service”“启动任意 launch”或 shell API。
 同目录临时文件、`fsync` 和原子替换。示教点或速度/加速度参数变化会清空旧密集轨迹并标记
 `STALE`，必须重新生成后才允许执行。
 
+`POST /api/v1/trajectories` 的显式 ID 如果已存在返回 HTTP 409，原文件保持不变。
+覆盖更新使用 `PUT /api/v1/trajectories/{id}`：只改名称或提交相同参数不会清除已生成轨迹。
+当前执行资源禁止修改、覆盖保存和删除；执行期间禁止重新生成，以避免阻塞停止处理。
+停止信号在后台任务开始前、校验中、等待 Action 和执行中均有效，成功取消报告 `CANCELLED`；
+停止无法确认仍进入错误/SAFE_STOP 路径。SIMULATION 软件急停后 SAFE_STOP 保持锁存。
+
+程序内可直接复用已组合执行器的服务：
+
+```python
+runtime.trajectories.execute("sampling_retreat_01")
+runtime.trajectories.execution_status()
+runtime.trajectories.stop()
+```
+
+`TrajectoryService` 执行器接收 `(points, progress_callback, cancel_event)`，必须检查每次运行
+独立的 `threading.Event`；Web 实例已经连接既有 TaskManager/Action 链。API 执行仍要求租约。
+
 笛卡尔点动的平移参考 `base_link`，旋转参考当前 `Link7` 局部轴，末端参考明确为
 `Link7` 而不是已标定工具 TCP。浏览器只提交固定方向，不提交距离、速度、topic 或 service；
 后端/ROS 执行器硬限制单次 10 mm/5°、Link7 线速度 0.01 m/s 和关节

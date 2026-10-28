@@ -19,9 +19,15 @@ velocities / accelerations / time_from_start、配置和状态，默认原子写
 `/rm75_sampling_gui/follow_joint_trajectory`，没有新增 JointPos 发布者；SIMULATION 复用相同
 API 且无物理输出。
 
-【本轮验证】`rm75_noetic` 容器中的轨迹与现有功能非 rostest 回归为 165/165 通过；catkin
-Release 构建共 15 个依赖包全部成功、无警告，rostest/catkin 汇总为 88 tests、0 errors、
-0 failures、0 skipped；React TypeScript 检查和 Vite 生产构建通过。统一
+【恢复审查修复】创建资源时重复 ID 原子拒绝；停止事件贯穿排队、校验和 Action 等待；
+回返轨迹进度沿当前段匹配实际反馈。既有受控 Action 服务与仿真现在消费完整速度/加速度并
+重建五次插值，避免执行时退化为线性插值。仿真急停保持 SAFE_STOP；保存相同参数保留 READY，
+页面改参数后禁止执行旧轨迹。详见 `rm75_sampling_gui/docs/web/WAYPOINT_TRAJECTORY_VALIDATION.md`。
+
+【本轮验证】`rm75_noetic` 容器中的轨迹与现有功能非 rostest 回归为 179/179 通过；catkin
+Release 构建共 15 个依赖包全部成功，rostest/catkin 汇总为 90 tests、0 errors、
+0 failures、0 skipped；React TypeScript 检查和 Vite 生产构建通过。构建存在既有依赖的
+CMake/Gazebo 弃用提示与 Vite 大包警告，不影响通过结果。统一
 `start_sampling_web.sh --mode simulation` 入口完成黑盒验证，覆盖轨迹采集、生成、取消、按稳定
 ID 重复执行以及原有笛卡尔、Touch、工具、安全停止和相机链路。路径示教页已在实际构建产物中
 完成浏览器目视检查。上述结论均为 SIMULATION 软件验收，本轮没有连接或移动真实机械臂；真机

@@ -1,6 +1,6 @@
 # RM75 Waypoint Trajectory Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build and publish a reusable manual waypoint trajectory editor, generator, persistence layer, and guarded executor for RM75-6FB.
 
@@ -39,10 +39,10 @@
 **Interfaces:**
 - Produces: `new_trajectory(name, ...)`, `validate_document(payload)`, `generate_quintic(waypoints, config, velocity_limits, acceleration_limits)`.
 
-- [ ] Write failing tests for schema defaults, strict waypoint passage, C2 knot continuity, monotone pass-through, reversal velocity, dense limit compliance, and non-finite input rejection.
-- [ ] Run the focused tests and confirm missing-module/behavior failures.
-- [ ] Implement the model and generator with deterministic knot indexing and iterative time scaling.
-- [ ] Run focused tests and refactor while green.
+- [x] Write failing tests for schema defaults, strict waypoint passage, C2 knot continuity, monotone pass-through, reversal velocity, dense limit compliance, and non-finite input rejection.
+- [x] Run the focused tests and confirm missing-module/behavior failures.
+- [x] Implement the model and generator with deterministic knot indexing and iterative time scaling.
+- [x] Run focused tests and refactor while green.
 
 ### Task 2: Atomic trajectory repository
 
@@ -54,10 +54,10 @@
 - Consumes: `validate_document(payload)`.
 - Produces: `TrajectoryRepository.list/get/save/delete` keyed by stable trajectory ID.
 
-- [ ] Write failing tests for create/overwrite/list/load/delete, restart recovery, malformed JSON isolation, stable ID validation, and atomic temp cleanup.
-- [ ] Run tests and verify repository failures.
-- [ ] Implement locked CRUD with `fsync` plus `os.replace`.
-- [ ] Run focused tests.
+- [x] Write failing tests for create/overwrite/list/load/delete, restart recovery, malformed JSON isolation, stable ID validation, and atomic temp cleanup.
+- [x] Run tests and verify repository failures.
+- [x] Implement locked CRUD with `fsync` plus `os.replace`.
+- [x] Run focused tests.
 
 ### Task 3: Feedback capture and trajectory service
 
@@ -72,10 +72,10 @@
 - Consumes: repository, generator, `WebRuntime.snapshot`, robot model limits/FK, adapter collision checker.
 - Produces: trajectory CRUD/waypoint/generate/status methods and `record_current_waypoint` using fresh source timestamps and TF quaternion.
 
-- [ ] Write failing tests for 20 single-click points matching feedback, stale/partial rejection, delete/reorder/clear invalidation, and generation collision rejection.
-- [ ] Run tests and confirm failures.
-- [ ] Add TF quaternion fields and implement the service/runtime composition.
-- [ ] Run focused tests.
+- [x] Write failing tests for 20 single-click points matching feedback, stale/partial rejection, delete/reorder/clear invalidation, and generation collision rejection.
+- [x] Run tests and confirm failures.
+- [x] Add TF quaternion fields and implement the service/runtime composition.
+- [x] Run focused tests.
 
 ### Task 4: Existing-chain execution and progress
 
@@ -89,10 +89,10 @@
 **Interfaces:**
 - Produces: `JointControlAdapter.validate_trajectory/execute_trajectory/to_joint_trajectory`, `TaskManager.execute_trajectory`, and ID-based background execution/cancel/status.
 
-- [ ] Write failing tests for ROS point conversion, start mismatch rejection, sample collision/limit validation, feedback-derived progress, ID invocation, and stop.
-- [ ] Run tests and confirm failures.
-- [ ] Implement adapter/task/service execution using the existing action and cancellation path.
-- [ ] Run focused plus existing joint-control tests.
+- [x] Write failing tests for ROS point conversion, start mismatch rejection, sample collision/limit validation, feedback-derived progress, ID invocation, and stop.
+- [x] Run tests and confirm failures.
+- [x] Implement adapter/task/service execution using the existing action and cancellation path.
+- [x] Run focused plus existing joint-control tests.
 
 ### Task 5: FastAPI resources and simulation flow
 
@@ -105,10 +105,10 @@
 **Interfaces:**
 - Produces: collection/resource CRUD, waypoint record/reorder, generate, execute, stop, and execution status routes under `/api/v1/trajectories`.
 
-- [ ] Write failing API tests for lease boundaries, CRUD, 20 points, stale status, generation, execution progress, stop, and ID invocation.
-- [ ] Run API tests and confirm route failures.
-- [ ] Implement request models/routes and simulation validation flow.
-- [ ] Run Web backend tests.
+- [x] Write failing API tests for lease boundaries, CRUD, 20 points, stale status, generation, execution progress, stop, and ID invocation.
+- [x] Run API tests and confirm route failures.
+- [x] Implement request models/routes and simulation validation flow.
+- [x] Run Web backend tests.
 
 ### Task 6: Path teaching React page
 
@@ -122,9 +122,9 @@
 - Consumes: Task 5 REST resources.
 - Produces: `路径示教` navigation/page with ordered waypoint table, parameters, persistence controls, generation, execution, stop, progress, and errors.
 
-- [ ] Add TypeScript contracts and page behavior against the REST API.
-- [ ] Match current panel/button/table responsive styles.
-- [ ] Run typecheck and production build, fixing all errors.
+- [x] Add TypeScript contracts and page behavior against the REST API.
+- [x] Match current panel/button/table responsive styles.
+- [x] Run typecheck and production build, fixing all errors.
 
 ### Task 7: Integration verification and GitHub publication
 
@@ -135,8 +135,24 @@
 **Interfaces:**
 - Produces: user/developer documentation and published feature branch.
 
-- [ ] Run focused and full RM75 sampling GUI pytest/rostest suites in `rm75_noetic`.
-- [ ] Run simulation black-box validation, React production build, and catkin package build/tests.
-- [ ] Review `git diff`, verify no cache/log/secrets and that pre-existing user changes are excluded.
-- [ ] Commit as `feat(rm75): add reusable waypoint trajectory editor`.
-- [ ] Push `feature/rm75-waypoint-trajectory` to `origin` without force and report commit/push evidence.
+- [x] Run focused and full RM75 sampling GUI pytest/rostest suites in `rm75_noetic`.
+- [x] Run simulation black-box validation, React production build, and catkin package build/tests.
+- [x] Review `git diff`, verify no cache/log/secrets and that pre-existing user changes are excluded.
+- [x] Commit as `feat(rm75): add reusable waypoint trajectory editor`.
+- [x] Push `feature/rm75-waypoint-trajectory` to `origin` without force and report commit/push evidence.
+
+## Resume review — 2026-10-28
+
+The previous run had already created commit `62bd595`, but had not published the branch.
+The resumed run reproduced duplicate-ID replacement, cancellation during validation,
+and return-leg progress jumps before fixing them. Additional integration checks fixed
+ignored trajectory derivatives in the existing guarded server, simulation SAFE_STOP
+latching, and no-op saves invalidating generated trajectories. The fixes remain on the
+same feature branch and preserve the three pre-existing user modifications.
+
+Current verification: 179 non-rostest pytest cases pass; the 15-package Release build
+succeeds; catkin/rostest reports 90 tests with no errors/failures/skips; frontend typecheck
+and production build pass; the unified simulation entrypoint passes the complete API
+black-box validator. Dependency CMake/Gazebo warnings and the Vite chunk-size warning
+are recorded separately from test failures. Full commands and review details are in
+`rm75_ws/src/rm75_sampling_gui/docs/web/WAYPOINT_TRAJECTORY_VALIDATION.md`.

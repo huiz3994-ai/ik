@@ -31,6 +31,9 @@ from urdf_parser_py.urdf import URDF
 import yaml
 
 from rm_msgs.msg import JointPos, Plan_State
+from rm75_sampling_gui.trajectory.interpolation import (
+    evaluate_quintic, trajectory_coefficients, segment_check_times,
+)
 
 
 JOINTS = tuple("joint{}".format(index) for index in range(1, 8))
@@ -278,6 +281,9 @@ class GuardedJointServer:
             raise RuntimeError("trajectory needs at least two points")
         positions: List[np.ndarray] = []
         times: List[float] = []
+        dense = []
+        has_derivatives = any(point.velocities or point.accelerations
+                              for point in trajectory.points)
         for point in trajectory.points:
             if len(point.positions) != 7:
                 raise RuntimeError("invalid trajectory point dimensions")
@@ -293,6 +299,14 @@ class GuardedJointServer:
                     raise RuntimeError("{} violates limit margin".format(JOINTS[index]))
             positions.append(vector)
             times.append(stamp)
+            if has_derivatives:
+                if len(point.velocities) != 7 or len(point.accelerations) != 7:
+                    raise RuntimeError("trajectory derivative dimensions must be seven")
+                dense.append({
+                    "positions": vector.tolist(), "time_from_start": stamp,
+                    "velocities": [point.velocities[index] for index in order],
+                    "accelerations": [point.accelerations[index] for index in order],
+                })
         if times[0] < 0.0 or float(np.max(np.abs(positions[0] - current))) > 0.03:
             raise RuntimeError("trajectory start does not match measured joints")
         if (self.max_delta is not None and
@@ -307,9 +321,22 @@ class GuardedJointServer:
         if np.any(np.abs(velocity) > vendor_velocity[None, :] + 1e-6):
             raise RuntimeError("trajectory exceeds vendor URDF velocity limit")
 
+        self._segment_coefficients = trajectory_coefficients(dense) if has_derivatives else []
+        checked_positions = list(positions)
+        for coefficients, duration in zip(self._segment_coefficients, dt):
+            for stamp in segment_check_times(coefficients, float(duration)):
+                sample = evaluate_quintic(coefficients, stamp)
+                if np.any(np.abs(sample["velocities"]) > vendor_velocity + 1e-6):
+                    raise RuntimeError("quintic trajectory exceeds vendor URDF velocity limit")
+                for axis, value in enumerate(sample["positions"]):
+                    lower, upper = self.limits[axis]
+                    if not lower + self.limit_margin <= value <= upper - self.limit_margin:
+                        raise RuntimeError("quintic trajectory violates joint limit margin")
+                checked_positions.append(sample["positions"])
+
         rospy.wait_for_service(self.collision_service, timeout=2.0)
         validity = rospy.ServiceProxy(self.collision_service, GetStateValidity)
-        for index, vector in enumerate(positions):
+        for index, vector in enumerate(checked_positions):
             request = GetStateValidityRequest()
             request.group_name = self.move_group
             request.robot_state = RobotState(
@@ -318,6 +345,18 @@ class GuardedJointServer:
             if not validity(request).valid:
                 raise RuntimeError("MoveIt/FCL collision at trajectory point {}".format(index))
         return positions, times
+
+    def _desired(self, positions, times, segment, elapsed):
+        before, after = segment - 1, segment
+        duration = times[after] - times[before]
+        local_time = min(duration, max(0.0, elapsed - times[before]))
+        if self._segment_coefficients:
+            sample = evaluate_quintic(self._segment_coefficients[before], local_time)
+            return sample["positions"], sample["velocities"]
+        # Compatibility for legacy position-only goals. New taught paths carry
+        # complete derivatives and always use the quintic branch above.
+        return (positions[before] + local_time / duration * (positions[after] - positions[before]),
+                (positions[after] - positions[before]) / duration)
 
     def _execute(self, goal) -> None:
         try:
@@ -378,12 +417,7 @@ class GuardedJointServer:
                     desired_velocity, settling=True
                 )
             else:
-                before, after = segment - 1, segment
-                fraction = max(0.0, min(1.0, (elapsed - times[before]) /
-                                       (times[after] - times[before])))
-                desired = positions[before] + fraction * (positions[after] - positions[before])
-                desired_velocity = ((positions[after] - positions[before]) /
-                                    (times[after] - times[before]))
+                desired, desired_velocity = self._desired(positions, times, segment, elapsed)
                 allowed_error = self._allowed_tracking_error(desired_velocity)
             error = desired - current
             violation = np.abs(error) - allowed_error

@@ -68,7 +68,13 @@ class TrajectoryRepository:
             result.sort(key=lambda item: (item["updated_at"], item["trajectory_id"]), reverse=True)
             return result
 
+    def create(self, document: Dict[str, Any]) -> Dict[str, Any]:
+        return self._write(document, overwrite=False)
+
     def save(self, document: Dict[str, Any]) -> Dict[str, Any]:
+        return self._write(document, overwrite=True)
+
+    def _write(self, document: Dict[str, Any], overwrite: bool) -> Dict[str, Any]:
         normalized = validate_document(document)
         normalized["updated_at"] = utc_now()
         path = self._path(normalized["trajectory_id"])
@@ -85,7 +91,17 @@ class TrajectoryRepository:
                     stream.write("\n")
                     stream.flush()
                     os.fsync(stream.fileno())
-                os.replace(temporary_name, str(path))
+                if overwrite:
+                    os.replace(temporary_name, str(path))
+                else:
+                    # Publish the complete file only if the ID is unused, even
+                    # across repository instances/processes. Never check-then-replace.
+                    try:
+                        os.link(temporary_name, str(path))
+                    except FileExistsError as error:
+                        raise RuntimeError("轨迹ID已存在：{}".format(
+                            normalized["trajectory_id"])) from error
+                    os.unlink(temporary_name)
                 temporary_name = None
                 try:
                     directory_fd = os.open(str(self.directory), os.O_RDONLY)
