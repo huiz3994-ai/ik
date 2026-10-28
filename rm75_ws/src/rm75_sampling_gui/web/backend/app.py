@@ -72,6 +72,22 @@ class CartesianJogRequest(BaseModel):
     ]
 
 
+class TrajectoryCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    trajectory_id: Optional[str] = Field(default=None, max_length=64)
+    tool_id: Optional[str] = Field(default=None, max_length=80)
+
+
+class TrajectoryUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    tool_id: Optional[str] = Field(default=None, max_length=80)
+    trajectory_config: Optional[Dict[str, Any]] = None
+
+
+class WaypointMoveRequest(BaseModel):
+    direction: Literal["up", "down"]
+
+
 async def _thread(callback: Any, *args: Any) -> Any:
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: callback(*args))
@@ -159,6 +175,10 @@ def create_app(runtime: WebRuntime, frontend_dir: Optional[str] = None) -> FastA
     async def runtime_error(_request: Request, error: RuntimeError) -> JSONResponse:
         LOG.warning("请求被安全边界拒绝：%s", error)
         return JSONResponse(status_code=409, content={"detail": str(error)})
+
+    @app.exception_handler(KeyError)
+    async def key_error(_request: Request, error: KeyError) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(error).strip("'")})
 
     @app.get("/api/v1/health")
     async def health() -> Dict[str, Any]:
@@ -264,6 +284,108 @@ def create_app(runtime: WebRuntime, frontend_dir: Optional[str] = None) -> FastA
                              x_rm75_control_session: Optional[str] = Header(default=None)) -> Any:
         return await _thread(runtime.execute_joints,
                              _session(x_rm75_control_session), request.target)
+
+    @app.get("/api/v1/trajectories")
+    async def list_trajectories() -> Dict[str, Any]:
+        return {
+            "trajectories": await _thread(runtime.trajectories.list),
+            "scan_errors": dict(runtime.trajectories.repository.scan_errors),
+        }
+
+    @app.post("/api/v1/trajectories")
+    async def create_trajectory(
+            request: TrajectoryCreateRequest,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(
+            runtime.trajectories.create, request.name, request.trajectory_id, request.tool_id
+        )
+
+    # Static execution routes must be registered before the trajectory-id route.
+    @app.get("/api/v1/trajectories/execution/status")
+    async def trajectory_execution_status() -> Dict[str, Any]:
+        return runtime.trajectories.execution_status()
+
+    @app.post("/api/v1/trajectories/execution/stop")
+    async def stop_trajectory_execution(
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(runtime.trajectories.stop)
+
+    @app.get("/api/v1/trajectories/{trajectory_id}")
+    async def get_trajectory(trajectory_id: str) -> Dict[str, Any]:
+        return await _thread(runtime.trajectories.get, trajectory_id)
+
+    @app.put("/api/v1/trajectories/{trajectory_id}")
+    async def update_trajectory(
+            trajectory_id: str, request: TrajectoryUpdateRequest,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        fields = getattr(request, "model_fields_set", None)
+        if fields is None:  # Pydantic v1 compatibility in ROS Noetic images.
+            fields = request.__fields_set__
+        tool_id = request.tool_id if "tool_id" in fields else Ellipsis
+        return await _thread(
+            runtime.trajectories.update_metadata,
+            trajectory_id, request.name, request.trajectory_config, tool_id,
+        )
+
+    @app.delete("/api/v1/trajectories/{trajectory_id}")
+    async def delete_trajectory(
+            trajectory_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        deleted = await _thread(runtime.trajectories.delete, trajectory_id)
+        if not deleted:
+            raise HTTPException(404, "轨迹不存在：{}".format(trajectory_id))
+        return {"deleted": True, "trajectory_id": trajectory_id}
+
+    @app.post("/api/v1/trajectories/{trajectory_id}/waypoints")
+    async def record_trajectory_waypoint(
+            trajectory_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(runtime.trajectories.record_current_waypoint, trajectory_id)
+
+    @app.delete("/api/v1/trajectories/{trajectory_id}/waypoints")
+    async def clear_trajectory_waypoints(
+            trajectory_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(runtime.trajectories.clear_waypoints, trajectory_id)
+
+    @app.delete("/api/v1/trajectories/{trajectory_id}/waypoints/{waypoint_id}")
+    async def delete_trajectory_waypoint(
+            trajectory_id: str, waypoint_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(
+            runtime.trajectories.delete_waypoint, trajectory_id, waypoint_id
+        )
+
+    @app.post("/api/v1/trajectories/{trajectory_id}/waypoints/{waypoint_id}/move")
+    async def move_trajectory_waypoint(
+            trajectory_id: str, waypoint_id: str, request: WaypointMoveRequest,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(
+            runtime.trajectories.move_waypoint,
+            trajectory_id, waypoint_id, -1 if request.direction == "up" else 1,
+        )
+
+    @app.post("/api/v1/trajectories/{trajectory_id}/generate")
+    async def generate_trajectory(
+            trajectory_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(runtime.trajectories.generate, trajectory_id)
+
+    @app.post("/api/v1/trajectories/{trajectory_id}/execute")
+    async def execute_trajectory(
+            trajectory_id: str,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        return await _thread(runtime.trajectories.execute, trajectory_id)
 
     @app.get("/api/v1/tools")
     async def tools() -> Dict[str, Any]:

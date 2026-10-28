@@ -221,9 +221,16 @@ class Monitor:
                 return
             t, q = transform.transform.translation, transform.transform.rotation
             rpy = euler_from_quaternion([q.x, q.y, q.z, q.w])
-            values = [t.x, t.y, t.z] + list(rpy)
+            values = [t.x, t.y, t.z] + list(rpy) + [q.x, q.y, q.z, q.w]
             if all(math.isfinite(x) for x in values):
-                self.put("tcp", dict(zip(("x", "y", "z", "rx", "ry", "rz"), values)), stamp)
+                self.put(
+                    "tcp",
+                    dict(zip(
+                        ("x", "y", "z", "rx", "ry", "rz", "qx", "qy", "qz", "qw"),
+                        values,
+                    )),
+                    stamp,
+                )
         except (tf2_ros.TransformException, ValueError):
             pass
 

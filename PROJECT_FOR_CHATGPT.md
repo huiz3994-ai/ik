@@ -1,5 +1,32 @@
 # PROJECT_FOR_CHATGPT
 
+## 2026-10-28：RM75 手动路径示教与可复用轨迹资源
+
+【路径示教】Web 新增独立“路径示教”页面。操作员每次点击只记录一个新鲜实际反馈点，包含
+固定顺序 joint1–joint7 的 rad 值、`base_link → Link7` 的 m/四元数位姿、关节与 TF ROS
+时间戳、稳定点位 ID 和序号；支持选择、删除、上下移动和清空。浏览器只调用 FastAPI，不直接
+读写服务器文件。
+
+【严格过点轨迹】轨迹模块使用非零单调结点速度、反向关节零结点速度和共享零结点加速度的
+分段五次 Hermite，多段位置/速度/加速度连续。原始示教关节向量在密集轨迹中逐点原样替换，
+不会被平滑器改变。段时间由 URDF 速度限制、配置加速度限制及页面比例初始化，再按密集采样
+极值迭代缩放；生成后逐点检查关节限位和 MoveIt/FCL 当前碰撞场景。
+
+【资源与执行】版本化 `RM75Trajectory` JSON 同时保存原始 waypoints、生成后的 positions /
+velocities / accelerations / time_from_start、配置和状态，默认原子写入
+`~/.ros/rm75_sampling_gui/trajectories/`。资源以稳定 trajectory_id 管理，提供 CRUD、重新
+生成、执行、停止和实际反馈进度 API。执行复用既有 TaskManager、JointControlAdapter 和
+`/rm75_sampling_gui/follow_joint_trajectory`，没有新增 JointPos 发布者；SIMULATION 复用相同
+API 且无物理输出。
+
+【本轮验证】`rm75_noetic` 容器中的轨迹与现有功能非 rostest 回归为 165/165 通过；catkin
+Release 构建共 15 个依赖包全部成功、无警告，rostest/catkin 汇总为 88 tests、0 errors、
+0 failures、0 skipped；React TypeScript 检查和 Vite 生产构建通过。统一
+`start_sampling_web.sh --mode simulation` 入口完成黑盒验证，覆盖轨迹采集、生成、取消、按稳定
+ID 重复执行以及原有笛卡尔、Touch、工具、安全停止和相机链路。路径示教页已在实际构建产物中
+完成浏览器目视检查。上述结论均为 SIMULATION 软件验收，本轮没有连接或移动真实机械臂；真机
+执行前仍须按现场流程复核工具、碰撞场景、控制器限制和急停。
+
 ## 2026-10-27：Web 操作流程与安全修复补录（对应 2026-10-26 源码，最新增量）
 
 > 本节记录当前工作区在 2026-10-26 完成、但此前未写入本文的修改。若与下方

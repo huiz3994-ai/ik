@@ -388,6 +388,45 @@ class TaskManager:
             raise TaskManagerError("关节控制适配器未加载")
         return self.joint_adapter.cancel()
 
+    def execute_trajectory(
+        self, points: List[Dict[str, Any]], progress_callback: Any = None,
+    ) -> Dict[str, Any]:
+        """Validate and execute a pre-generated dense path through the guarded action."""
+
+        if self.joint_adapter is None:
+            raise TaskManagerError("关节控制适配器未加载")
+        with self._operation_lock:
+            self._ensure_not_safe_stop()
+            if self.launches.mode is not None:
+                raise TaskManagerError("Touch或力控正在占用机械臂")
+            validation = self.joint_adapter.validate_trajectory(
+                points,
+                self.ros.telemetry_snapshot(),
+                self.state_machine.state,
+                self.control_mode,
+            )
+            if not validation.get("ok"):
+                failures = [
+                    str(item.get("detail", item.get("name", "检查失败")))
+                    for item in validation.get("checks", []) if not item.get("ok")
+                ]
+                raise TaskManagerError(
+                    "示教轨迹安全检查未通过：{}".format("；".join(failures) or "未知原因")
+                )
+            try:
+                self.state_machine.transition(
+                    RobotState.JOINT_CONTROL, "开始执行示教轨迹"
+                )
+                result = self.joint_adapter.execute_trajectory(
+                    points, self.ros.telemetry_snapshot, progress_callback
+                )
+                reason = "示教轨迹已停止" if result.get("cancelled") else "示教轨迹执行结束"
+                self.state_machine.transition(RobotState.IDLE, reason)
+                return result
+            except Exception as error:
+                self._fail_safe(error, "示教轨迹执行")
+                raise
+
     def select_tool(self, tool_name: str) -> None:
         if tool_name not in self.tools:
             raise TaskManagerError("unknown tool {}".format(tool_name))

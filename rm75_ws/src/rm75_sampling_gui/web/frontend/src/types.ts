@@ -1,6 +1,85 @@
 export type Health = Record<string, boolean>
 export type Dict = Record<string, unknown>
 
+export interface TrajectoryWaypoint {
+  waypoint_id: string
+  sequence: number
+  joint_names: string[]
+  joint_positions: number[]
+  link7_pose: {
+    position: {x:number;y:number;z:number}
+    orientation: {qx:number;qy:number;qz:number;qw:number}
+  }
+  ros_timestamp: number
+  tf_ros_timestamp?: number
+}
+
+export interface TrajectoryPoint {
+  positions: number[]
+  velocities: number[]
+  accelerations: number[]
+  time_from_start: number
+}
+
+export interface TrajectoryConfig {
+  interpolation_algorithm: 'piecewise_quintic_c2'
+  speed_scale: number
+  acceleration_scale: number
+  sample_period_s: number
+}
+
+export interface TrajectoryStatus {
+  state: 'EMPTY'|'STALE'|'READY'|'VALIDATING'|'EXECUTING'|'COMPLETED'|'CANCELLED'|'ERROR'
+  message: string
+  generated_at?: string|null
+  waypoint_count: number
+  trajectory_point_count: number
+  duration_s: number
+  waypoint_indices?: number[]
+  validation?: Dict
+}
+
+export interface RM75Trajectory {
+  schema_version: string
+  trajectory_id: string
+  name: string
+  robot_model: string
+  joint_names: string[]
+  frame_id: string
+  tool_id: string|null
+  created_at: string
+  updated_at: string
+  waypoints: TrajectoryWaypoint[]
+  trajectory_config: TrajectoryConfig
+  trajectory: TrajectoryPoint[]
+  trajectory_status: TrajectoryStatus
+}
+
+export interface TrajectorySummary {
+  trajectory_id: string
+  name: string
+  state: TrajectoryStatus['state']
+  message: string
+  waypoint_count: number
+  trajectory_point_count: number
+  duration_s: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TrajectoryExecution {
+  state: 'IDLE'|'EXECUTING'|'COMPLETED'|'CANCELLED'|'ERROR'
+  trajectory_id: string|null
+  message: string
+  current_point: number
+  total_points: number
+  current_waypoint: number
+  total_waypoints: number
+  progress: number
+  max_error_rad?: number|null
+  error?: string
+}
+
 export interface ToolPickConfig {
   slot_id: number; name: string
   x: number; y: number; z: number
@@ -91,6 +170,7 @@ export interface StationState {
     status?: string; step?: number; step_name?: string; slot_id?: number|null
     grasp_confirmed?: boolean; error?: string; updated_at?: number
   }
+  trajectory_execution?: TrajectoryExecution
 }
 
 export interface JointDescriptor {

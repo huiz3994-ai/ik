@@ -50,6 +50,26 @@ Web 架构、PyQt 对照、API 和诚实验收边界见
 [`docs/web/VALIDATION.md`](docs/web/VALIDATION.md)。浏览器控制租约必须由活跃 WebSocket
 持续续期；页面关闭后不会由后端伪造或无限续期 ROS GUI 心跳。
 
+### 路径示教与通用轨迹
+
+Web 导航中的“路径示教”按操作员点击逐个记录新鲜 `/joint_states` 七轴实际角度和
+`base_link → Link7` TF 位置/四元数，不进行自动采样。点位可选择、删除、上移、下移和清空；
+任何点位或速度/加速度比例修改都会清除旧密集轨迹并标记 `STALE`。
+
+“生成平滑轨迹”使用关节空间分段五次 Hermite 插值。单调相邻段采用非零调和平均通过速度，
+方向反转的关节在该关键点速度归零，所有关键点共享连续速度和零结点加速度，因此位置、速度、
+加速度为 C2 连续，同时每个原始七轴示教向量被原样写入密集轨迹。生成器根据 URDF 速度限制、
+配置的七轴加速度限制及页面比例迭代放大时间，并对全部密集点检查关节限位和当前 MoveIt
+碰撞场景。
+
+轨迹以版本化 `RM75Trajectory` JSON 保存，默认目录为
+`~/.ros/rm75_sampling_gui/trajectories/`，可由 `trajectory_library.directory` 调整。文件使用
+稳定 `trajectory_id` 而不是显示名称，采用同目录临时文件、`fsync` 和原子替换。其他任务可
+通过 `POST /api/v1/trajectories/{trajectory_id}/execute`（等价于服务层
+`execute(trajectory_id)`）复用，不需再次实现插值。真实执行继续走
+`TaskManager → JointControlAdapter → /rm75_sampling_gui/follow_joint_trajectory`，进度由实际
+关节反馈匹配密集轨迹得到；停止、控制租约、SAFE_STOP 和竞争命令源保护保持不变。
+
 “五工具配置”页可编辑 Tool1–Tool5 的绝对 `base_link → Link7` 位姿（位置 m、固定轴
 XYZ RPY rad）和垂直抬升高度，并原子持久化到 `config/tools.yaml`。确认执行前必须先通过
 MoveIt Dry Run；执行顺序为预抓取 `Z+H`、保持姿态严格沿基坐标 Z 下降、现有 24V 取物

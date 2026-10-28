@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { RobotDescriptor, StationState } from './types'
 
-type View = 'dashboard'|'robot'|'cartesian'|'force'|'qr'|'tools'|'robotctl'|'sampling'|'diagnostics'|'parameters'
+type View = 'dashboard'|'robot'|'cartesian'|'trajectory'|'force'|'qr'|'tools'|'robotctl'|'sampling'|'diagnostics'|'parameters'
 export type Planner = 'ompl'|'lin'|'ptp'|'direct'
 
 interface Store {
@@ -61,10 +61,11 @@ async function saveSettings(planner: Planner, speed: number) {
     body:JSON.stringify({planner,speed})})
 }
 
-const CONTROL_PATH = /^\/api\/v1\/(cartesian\/(execute|jog\/)|joints\/execute|commands\/|poses\/|control\/path|limit-recovery)/
+const CONTROL_PATH = /^\/api\/v1\/(cartesian\/(execute|jog\/)|joints\/execute|commands\/|poses\/|control\/path|limit-recovery|trajectories(?:\/|$))/
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (CONTROL_PATH.test(path) && !(path === '/api/v1/limit-recovery' && (!init.method || init.method === 'GET'))) {
+  const method=(init.method||'GET').toUpperCase()
+  if (method!=='GET' && CONTROL_PATH.test(path)) {
     const {sessionId,sessionReady}=useStation.getState()
     if (!sessionId) throw new Error('只读模式：请先取得控制权')
     if (!sessionReady) throw new Error('控制权心跳尚未就绪')

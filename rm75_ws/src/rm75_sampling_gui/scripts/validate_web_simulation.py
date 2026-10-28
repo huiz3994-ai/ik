@@ -130,6 +130,90 @@ async def validate(base_url: str) -> None:
             if not tracked:
                 raise RuntimeError("仿真关节未在3秒内跟踪目标")
 
+            # Record two real simulation-feedback waypoints, generate the same
+            # reusable JSON resource used in production, cancel one execution,
+            # then invoke the same trajectory ID again to completion.
+            trajectory_id = "simulation_validator_path"
+            existing = (await client.get("/api/v1/trajectories")).json().get(
+                "trajectories", [])
+            if any(item.get("trajectory_id") == trajectory_id for item in existing):
+                (await client.delete(
+                    "/api/v1/trajectories/{}".format(trajectory_id),
+                    headers=headers)).raise_for_status()
+            created = await client.post("/api/v1/trajectories", headers=headers,
+                json={"name": "仿真验收轨迹", "trajectory_id": trajectory_id})
+            created.raise_for_status()
+            (await client.post(
+                "/api/v1/trajectories/{}/waypoints".format(trajectory_id),
+                headers=headers)).raise_for_status()
+            second = list(target)
+            second[0] += 0.06
+            (await client.post("/api/v1/joints/execute",
+                json={"target": second}, headers=headers)).raise_for_status()
+            for _ in range(40):
+                await asyncio.sleep(0.1)
+                joints = (await client.get("/api/v1/state")).json()["joints"]
+                if abs(joints["joint1"] - second[0]) < 0.01:
+                    break
+            else:
+                raise RuntimeError("轨迹验收第二示教点未到位")
+            recorded = await client.post(
+                "/api/v1/trajectories/{}/waypoints".format(trajectory_id),
+                headers=headers)
+            recorded.raise_for_status()
+            if len(recorded.json().get("waypoints", [])) != 2:
+                raise RuntimeError("手动示教没有精确记录两个点")
+            generated = await client.post(
+                "/api/v1/trajectories/{}/generate".format(trajectory_id),
+                headers=headers)
+            generated.raise_for_status()
+            if generated.json().get("trajectory_status", {}).get("state") != "READY":
+                raise RuntimeError("平滑示教轨迹未进入READY")
+
+            async def move_to(values):
+                (await client.post("/api/v1/joints/execute",
+                    json={"target": values}, headers=headers)).raise_for_status()
+                for _ in range(50):
+                    await asyncio.sleep(0.1)
+                    joints = (await client.get("/api/v1/state")).json()["joints"]
+                    if max(abs(joints["joint{}".format(i + 1)] - value)
+                           for i, value in enumerate(values)) < 0.01:
+                        return
+                raise RuntimeError("仿真关节未回到示教轨迹起点")
+
+            await move_to(target)
+            (await client.post(
+                "/api/v1/trajectories/{}/execute".format(trajectory_id),
+                headers=headers)).raise_for_status()
+            await asyncio.sleep(0.1)
+            stopped = await client.post(
+                "/api/v1/trajectories/execution/stop", headers=headers)
+            stopped.raise_for_status()
+            for _ in range(30):
+                await asyncio.sleep(0.05)
+                execution = (await client.get(
+                    "/api/v1/trajectories/execution/status")).json()
+                if execution.get("state") != "EXECUTING":
+                    break
+            if execution.get("state") != "CANCELLED":
+                raise RuntimeError("仿真轨迹停止没有得到CANCELLED确认")
+
+            await move_to(target)
+            (await client.post(
+                "/api/v1/trajectories/{}/execute".format(trajectory_id),
+                headers=headers)).raise_for_status()
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                execution = (await client.get(
+                    "/api/v1/trajectories/execution/status")).json()
+                if execution.get("state") != "EXECUTING":
+                    break
+            if execution.get("state") != "COMPLETED" or execution.get("progress") != 1.0:
+                raise RuntimeError("按轨迹ID重复执行未完成或进度不是100%")
+            (await client.delete(
+                "/api/v1/trajectories/{}".format(trajectory_id),
+                headers=headers)).raise_for_status()
+
             response = await client.post("/api/v1/commands/start_z_force_teleop",
                 json={"payload": {}}, headers=headers)
             response.raise_for_status()
@@ -283,7 +367,8 @@ async def validate(base_url: str) -> None:
                 raise RuntimeError("WebSocket断联后末端点动未停止")
             if "lease" not in disconnected_jog.get("stop_reason", "").lower():
                 raise RuntimeError("WebSocket断联停止原因未记录控制租约失效")
-            print("PASS: simulation health, lease heartbeat, joint tracking, twelve "
+            print("PASS: simulation health, lease heartbeat, joint tracking, reusable "
+                  "trajectory record/generate/cancel/repeat-by-ID, twelve "
                   "Cartesian hold/release directions, ordinary Touch teleop start/stop, "
                   "WebSocket-disconnect stop, Z-only force/position mode, bounded "
                   "Touch-Y haptics, voltage, sampling "

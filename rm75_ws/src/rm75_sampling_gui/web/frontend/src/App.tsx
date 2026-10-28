@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, Camera, ChevronRight, CircleGauge, FileSliders, FlaskConical, Gamepad2, Menu, Move3D, OctagonX, PackageCheck, Power, QrCode, Radio, RefreshCw, RotateCw, Save, Server, ShieldCheck, Siren, Unplug, Waves } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Bot, Camera, ChevronRight, CircleGauge, FileSliders, FlaskConical, FolderOpen, Gamepad2, Menu, Move3D, OctagonX, PackageCheck, Play, Plus, Power, QrCode, Radio, RefreshCw, RotateCw, Save, Server, ShieldCheck, Siren, Square, Trash2, Unplug, Waves, Waypoints } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { JointPanel, Metric, Panel, RobotTwin, StateBadge, StatusPill } from './components'
 import { api, command, useStation } from './store'
-import type { Dict, RobotDescriptor, StationState, ToolPickConfig } from './types'
+import type { Dict, RM75Trajectory, RobotDescriptor, StationState, ToolPickConfig, TrajectoryExecution, TrajectorySummary } from './types'
 
 const nav = [
-  ['dashboard','操作台',CircleGauge],['robot','机器人状态',Bot],['cartesian','末端位置控制',Move3D],['force','实时力监控',Waves],
+  ['dashboard','操作台',CircleGauge],['robot','机器人状态',Bot],['cartesian','末端位置控制',Move3D],['trajectory','路径示教',Waypoints],['force','实时力监控',Waves],
   ['qr','二维码取物',QrCode],['tools','自主写点取物',PackageCheck],['robotctl','机器人控制',Gamepad2],['sampling','采样设备',FlaskConical],['diagnostics','故障诊断',Siren],['parameters','系统参数',FileSliders]
 ] as const
 
@@ -267,6 +267,64 @@ function SamplingPage({state}:{state:StationState}) {
   </div>
 }
 
+const idleTrajectoryExecution:TrajectoryExecution={state:'IDLE',trajectory_id:null,message:'待机',current_point:0,total_points:0,current_waypoint:0,total_waypoints:0,progress:0}
+
+function TrajectoryPage({state}:{state:StationState}) {
+  const {sessionReady,setError}=useStation()
+  const [library,setLibrary]=useState<TrajectorySummary[]>([])
+  const [document,setDocument]=useState<RM75Trajectory|null>(null)
+  const [loadId,setLoadId]=useState('')
+  const [selected,setSelected]=useState('')
+  const [name,setName]=useState('采样撤离路径01')
+  const [speed,setSpeed]=useState(.2)
+  const [acceleration,setAcceleration]=useState(.2)
+  const [busy,setBusy]=useState('')
+  const [notice,setNotice]=useState('')
+  const execution=state.trajectory_execution||idleTrajectoryExecution
+  const refreshLibrary=useCallback(async()=>{const value=await api<{trajectories:TrajectorySummary[]}>('/api/v1/trajectories');setLibrary(value.trajectories);if(!loadId&&value.trajectories[0])setLoadId(value.trajectories[0].trajectory_id)},[loadId])
+  const applyDocument=useCallback((value:RM75Trajectory)=>{setDocument(value);setLoadId(value.trajectory_id);setName(value.name);setSpeed(value.trajectory_config.speed_scale);setAcceleration(value.trajectory_config.acceleration_scale);setSelected(value.waypoints.some(item=>item.waypoint_id===selected)?selected:'')},[selected])
+  useEffect(()=>{void refreshLibrary().catch(error=>setError(String(error)))},[refreshLibrary,setError])
+  useEffect(()=>{if(document&&execution.trajectory_id===document.trajectory_id&&execution.state!=='EXECUTING'){api<RM75Trajectory>(`/api/v1/trajectories/${document.trajectory_id}`).then(applyDocument).catch(()=>{})}},[execution.state,execution.trajectory_id,document?.trajectory_id])
+  const perform=async(label:string,operation:()=>Promise<void>)=>{setBusy(label);setNotice('');try{await operation()}catch(error){setError(error instanceof Error?error.message:String(error))}finally{setBusy('')}}
+  const create=async()=>{const value=await api<RM75Trajectory>('/api/v1/trajectories',{method:'POST',body:JSON.stringify({name})});applyDocument(value);await refreshLibrary();return value}
+  const ensure=async()=>document||await create()
+  const savePath=()=>perform('save',async()=>{if(!document){await create();setNotice('路径已创建并保存');return}const value=await api<RM75Trajectory>(`/api/v1/trajectories/${document.trajectory_id}`,{method:'PUT',body:JSON.stringify({name,trajectory_config:{speed_scale:speed,acceleration_scale:acceleration}})});applyDocument(value);await refreshLibrary();setNotice('路径名称与轨迹参数已原子保存')})
+  const loadPath=()=>perform('load',async()=>{if(!loadId)throw new Error('请选择要加载的路径');applyDocument(await api<RM75Trajectory>(`/api/v1/trajectories/${loadId}`));setNotice('路径已从 JSON 加载')})
+  const deletePath=()=>perform('delete-path',async()=>{if(!document)return;if(!window.confirm(`删除路径“${document.name}”？该 JSON 文件将被删除。`))return;await api(`/api/v1/trajectories/${document.trajectory_id}`,{method:'DELETE'});setDocument(null);setSelected('');setLoadId('');await refreshLibrary();setNotice('路径已删除')})
+  const record=()=>perform('record',async()=>{const current=await ensure();const value=await api<RM75Trajectory>(`/api/v1/trajectories/${current.trajectory_id}/waypoints`,{method:'POST'});applyDocument(value);await refreshLibrary();setNotice(`已记录 P${value.waypoints.length}：真实七轴与 Link7 TF`)})
+  const removeSelected=()=>perform('delete-point',async()=>{if(!document||!selected)throw new Error('请先选择点位');const value=await api<RM75Trajectory>(`/api/v1/trajectories/${document.trajectory_id}/waypoints/${selected}`,{method:'DELETE'});applyDocument(value);setSelected('');setNotice('选中点已删除，旧轨迹已失效')})
+  const move=(direction:'up'|'down')=>perform(direction,async()=>{if(!document||!selected)throw new Error('请先选择点位');const value=await api<RM75Trajectory>(`/api/v1/trajectories/${document.trajectory_id}/waypoints/${selected}/move`,{method:'POST',body:JSON.stringify({direction})});applyDocument(value);setNotice('点位顺序已更新，旧轨迹已失效')})
+  const clear=()=>perform('clear',async()=>{if(!document)return;if(!window.confirm('清空当前路径的全部示教点？'))return;applyDocument(await api<RM75Trajectory>(`/api/v1/trajectories/${document.trajectory_id}/waypoints`,{method:'DELETE'}));setSelected('');setNotice('当前路径已清空')})
+  const generate=()=>perform('generate',async()=>{const current=await ensure();const updated=await api<RM75Trajectory>(`/api/v1/trajectories/${current.trajectory_id}`,{method:'PUT',body:JSON.stringify({name,trajectory_config:{speed_scale:speed,acceleration_scale:acceleration}})});const value=await api<RM75Trajectory>(`/api/v1/trajectories/${updated.trajectory_id}/generate`,{method:'POST'});applyDocument(value);await refreshLibrary();setNotice(`已生成 ${value.trajectory.length} 个密集点，并通过限位/碰撞检查`)})
+  const execute=()=>perform('execute',async()=>{if(!document)throw new Error('请先加载路径');await api(`/api/v1/trajectories/${document.trajectory_id}/execute`,{method:'POST'});setNotice('轨迹已进入既有七轴受控执行链')})
+  const stop=()=>perform('stop',async()=>{await api('/api/v1/trajectories/execution/stop',{method:'POST'});setNotice('已请求停止，等待控制器确认')})
+  const selectedIndex=document?.waypoints.findIndex(item=>item.waypoint_id===selected)??-1
+  const ready=document?.trajectory_status.state==='READY'||document?.trajectory_status.state==='COMPLETED'||document?.trajectory_status.state==='CANCELLED'
+  const percent=Math.round((execution.progress||0)*100)
+  return <div className="page-grid trajectory-page">
+    <Panel title="RM75 路径示教" eyebrow="MANUAL WAYPOINT TEACHING" className="span-2">
+      <div className="trajectory-title"><label><span>路径名称</span><input value={name} maxLength={120} onChange={event=>setName(event.target.value)}/></label><Metric label="已记录点数" value={document?.waypoints.length||0} accent/><Metric label="密集轨迹点" value={document?.trajectory.length||0}/></div>
+      <div className="waypoint-table"><div className="waypoint-head"><span>点位</span><span>q1～q7 / rad</span><span>Link7 XYZ / m</span><span>ROS 时间</span></div>{document?.waypoints.length?document.waypoints.map(point=><button key={point.waypoint_id} className={selected===point.waypoint_id?'selected':''} onClick={()=>setSelected(point.waypoint_id)}><b>P{point.sequence}</b><code>{point.joint_positions.map(value=>value.toFixed(4)).join('  ')}</code><code>{(['x','y','z'] as const).map(key=>point.link7_pose.position[key].toFixed(4)).join('  ')}</code><time>{point.ros_timestamp.toFixed(3)}</time></button>):<div className="waypoint-empty"><Waypoints/>尚未记录点位；移动机械臂后点击“记录当前点”</div>}</div>
+      <div className="trajectory-actions"><button className="primary" disabled={!sessionReady||!!busy} onClick={record}><Plus/>记录当前点</button><button disabled={!sessionReady||!!busy||!selected} onClick={removeSelected}><Trash2/>删除选中点</button><button disabled={!sessionReady||!!busy||selectedIndex<=0} onClick={()=>move('up')}><ArrowUp/>上移</button><button disabled={!sessionReady||!!busy||selectedIndex<0||selectedIndex===(document?.waypoints.length||0)-1} onClick={()=>move('down')}><ArrowDown/>下移</button><button className="danger-button" disabled={!sessionReady||!!busy||!document?.waypoints.length} onClick={clear}>清空路径</button></div>
+    </Panel>
+    <Panel title="轨迹参数" eyebrow="C2 QUINTIC · STRICT WAYPOINTS">
+      <label className="trajectory-range"><span>速度比例 <b>{Math.round(speed*100)}%</b></span><input type="range" min="0.05" max="1" step="0.05" value={speed} onChange={event=>setSpeed(Number(event.target.value))}/></label>
+      <label className="trajectory-range"><span>加速度比例 <b>{Math.round(acceleration*100)}%</b></span><input type="range" min="0.05" max="1" step="0.05" value={acceleration} onChange={event=>setAcceleration(Number(event.target.value))}/></label>
+      <button className="primary full" disabled={!sessionReady||!!busy||(document?.waypoints.length||0)<2} onClick={generate}>{busy==='generate'?<RefreshCw className="spin"/>:<Waypoints/>}生成平滑轨迹</button>
+      <div className={`trajectory-state ${document?.trajectory_status.state.toLowerCase()||'empty'}`}><b>{document?.trajectory_status.state||'EMPTY'}</b><span>{document?.trajectory_status.message||'创建路径后开始示教'}</span><small>采样周期 {document?.trajectory_config.sample_period_s||.02} s · 分段五次 C2</small></div>
+    </Panel>
+    <Panel title="轨迹管理" eyebrow="ATOMIC JSON RESOURCE" className="span-2">
+      <div className="trajectory-library"><select value={loadId} onChange={event=>setLoadId(event.target.value)}><option value="">选择已保存路径</option>{library.map(item=><option key={item.trajectory_id} value={item.trajectory_id}>{item.name} · {item.waypoint_count}点 · {item.state}</option>)}</select><button disabled={!!busy||!loadId} onClick={loadPath}><FolderOpen/>加载路径</button><button className="primary" disabled={!sessionReady||!!busy||!name.trim()} onClick={savePath}><Save/>保存路径</button><button className="danger-button" disabled={!sessionReady||!!busy||!document} onClick={deletePath}><Trash2/>删除路径</button></div>
+      <p className="lock-note"><ShieldCheck size={16}/>稳定 ID：<b>{document?.trajectory_id||'创建后分配'}</b>。后端原子写入 JSON；示教点或参数变化后必须重新生成。</p>
+    </Panel>
+    <Panel title="轨迹执行" eyebrow="EXISTING GUARDED ACTION CHAIN">
+      <div className="trajectory-execution"><Metric label="执行状态" value={execution.state} accent={execution.state==='EXECUTING'}/><Metric label="当前目标点" value={`${execution.current_waypoint} / ${execution.total_waypoints||document?.waypoints.length||0}`}/><Metric label="执行进度" value={percent} unit="%"/><Metric label="实际跟踪误差" value={execution.max_error_rad==null?'—':execution.max_error_rad.toFixed(4)} unit="rad"/></div><div className="trajectory-progress"><i style={{width:`${percent}%`}}/></div>
+      <div className="button-row"><button className="primary" disabled={!sessionReady||!!busy||!ready||execution.state==='EXECUTING'} onClick={execute}><Play/>执行路径</button><button className="danger-button" disabled={!sessionReady||!!busy||execution.state!=='EXECUTING'} onClick={stop}><Square/>停止执行</button></div>
+      {(execution.error||notice)&&<p className={`tool-notice ${execution.error?'critical':''}`}>{execution.error||notice}</p>}
+    </Panel>
+  </div>
+}
+
 type LimitRecoveryResult={ok:boolean;needs_recovery:boolean;recovered:boolean;exit_code:number;command:string;host:string;port:number;target:string;output:string}
 function Diagnostics({state}:{state:StationState}) {
   const {sessionReady}=useStation()
@@ -309,6 +367,6 @@ export function App() {
   const acquire=async()=>{try{if(state?.offline){throw new Error('OFFLINE模式禁止取得控制权')};const r=await api<{session_id:string}>('/api/v1/control/session',{method:'POST',body:JSON.stringify({client:navigator.userAgent})});setSession(r.session_id)}catch(e){setError(String(e))}}
   const release=async()=>{try{if(['JOGGING','STOPPING','LIMIT_REACHED'].includes(state?.cartesian_jog?.state||''))await api('/api/v1/cartesian/jog/stop',{method:'POST'});await api('/api/v1/control/session',{method:'DELETE'})}finally{setSession(null)}}
   const estop=()=>command('emergency_stop').catch(e=>setError(String(e)))
-  const content=useMemo(()=>{if(!state)return <div className="loading"><RefreshCw className="spin"/>正在连接 RM75 Web Backend…</div>;if(view==='dashboard')return <Dashboard state={state}/>;if(view==='robot')return model?<RobotPage state={state} model={model}/>:<div className="loading">装载厂商模型…</div>;if(view==='cartesian')return <CartesianJogPage state={state}/>;if(view==='force')return <ForcePage state={state}/>;if(view==='qr')return <VisionPage state={state}/>;if(view==='tools')return <ToolsPage state={state}/>;if(view==='robotctl')return <RobotControlPage state={state}/>;if(view==='sampling')return <SamplingPage state={state}/>;if(view==='diagnostics')return <Diagnostics state={state}/>;return <Parameters/>},[view,state,model])
+  const content=useMemo(()=>{if(!state)return <div className="loading"><RefreshCw className="spin"/>正在连接 RM75 Web Backend…</div>;if(view==='dashboard')return <Dashboard state={state}/>;if(view==='robot')return model?<RobotPage state={state} model={model}/>:<div className="loading">装载厂商模型…</div>;if(view==='cartesian')return <CartesianJogPage state={state}/>;if(view==='trajectory')return <TrajectoryPage state={state}/>;if(view==='force')return <ForcePage state={state}/>;if(view==='qr')return <VisionPage state={state}/>;if(view==='tools')return <ToolsPage state={state}/>;if(view==='robotctl')return <RobotControlPage state={state}/>;if(view==='sampling')return <SamplingPage state={state}/>;if(view==='diagnostics')return <Diagnostics state={state}/>;return <Parameters/>},[view,state,model])
   return <div className="app"><aside className={`sidebar ${menu?'open':''}`}><div className="brand"><div className="brand-mark"><Bot/></div><div><b>RM75</b><span>ALPINE SAMPLING</span></div></div><nav>{nav.map(([key,label,Icon])=><button key={key} className={view===key?'active':''} onClick={()=>{setView(key);setMenu(false)}}><Icon/><span>{label}</span></button>)}</nav><div className="sidebar-foot"><span>CONTROL PLATFORM</span><b>v1.0 · ROS Noetic</b></div></aside><main><header className="topbar"><button className="menu-button" onClick={()=>setMenu(!menu)}><Menu/></button><div className="breadcrumb"><span>高原寒区采样机器人</span><ChevronRight/><b>{nav.find(n=>n[0]===view)?.[1]}</b></div><div className="global-status"><span className={`connection ${connected?'on':''}`}><Radio/>{connected?'WebSocket 实时':'通信断开'}</span>{state?.offline&&<span className="offline">OFFLINE / 禁止控制</span>}{state?.simulation&&<span className="simulation">SIMULATION / 无物理输出</span>}<StateBadge state={state?.operator_state}/>{sessionId?<button className={`lease ${sessionReady?'ready':''}`} onClick={release}><Power/>{sessionReady?'控制权已就绪':'建立心跳…'}</button>:<button className="lease" onClick={acquire}><Unplug/>取得控制权</button>}<button className="estop" disabled={!sessionReady} onClick={estop}><OctagonX/>软件急停</button></div></header><div className="content">{lastError&&<div className="toast" onClick={()=>setError('')}><b>操作未完成</b><span>{lastError}</span><i>×</i></div>}{content}</div><footer><div><Activity/>刷新序列 <b>{state?.sequence??'—'}</b></div><div>数据时间 <b>{state?new Date(state.timestamp*1000).toLocaleTimeString():'—'}</b></div><div>控制会话 <b>{sessionReady?'独占 / 心跳有效':'只读'}</b></div></footer></main></div>
 }

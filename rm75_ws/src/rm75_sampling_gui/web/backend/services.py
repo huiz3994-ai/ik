@@ -18,6 +18,8 @@ from rm75_sampling_gui.model.robot_model import JOINT_NAMES, RM75RobotModel
 from rm75_sampling_gui.ros.ros_interface import ROSInterface
 from rm75_sampling_gui.state.state_machine import RobotState, StateMachine
 from rm75_sampling_gui.task.task_manager import TaskManager
+from rm75_sampling_gui.trajectory.repository import TrajectoryRepository
+from rm75_sampling_gui.trajectory.service import TrajectoryService
 from .session import ControlSessionManager
 from .hardware import SamplingHardware
 from .tool5_drill import ACTIVE_STATES, Tool5DrillWorkflow
@@ -127,6 +129,7 @@ class WebRuntime:
         self._last_snapshot: Dict[str, Any] = {}
         self._offline_started = time.monotonic()
         self._simulation_lock = threading.RLock()
+        self._simulation_trajectory_cancel = threading.Event()
         self._control_path_lock = threading.RLock()
         self._cartesian_exit_stop_attempted = False
         # A collision-free, non-singular posture captured by the existing
@@ -193,6 +196,31 @@ class WebRuntime:
             lambda: bool(self.sessions.snapshot().get("active")),
             simulation=self.simulation,
         )
+        trajectory_options = dict(config.get("trajectory_library", {}))
+        trajectory_directory = str(trajectory_options.get(
+            "directory", "~/.ros/rm75_sampling_gui/trajectories"
+        ))
+        collision_required = bool(trajectory_options.get(
+            "collision_check_required", True
+        ))
+        collision_checker = (
+            (lambda values: False) if self.simulation
+            else None if self.offline
+            else self.joint_adapter._collision_at
+        )
+        self.trajectories = TrajectoryService(
+            TrajectoryRepository(trajectory_directory),
+            self.robot,
+            self._trajectory_feedback_snapshot,
+            trajectory_options.get("acceleration_limits_rad_s2", [1.5] * 7),
+            collision_checker=collision_checker,
+            collision_required=(collision_required and not self.simulation),
+            joint_limit_margin_rad=float(
+                config.get("joint_control", {}).get("joint_limit_margin_rad", 0.02)
+            ),
+            executor=self._execute_trajectory_points,
+            stop_executor=self._stop_trajectory_execution,
+        )
 
     @staticmethod
     def _configured_control_path(config: Dict[str, Any]) -> str:
@@ -247,8 +275,37 @@ class WebRuntime:
         else:
             roll = math.atan2(-float(matrix[1, 2]), float(matrix[1, 1]))
             yaw = 0.0
+        rotation = matrix[:3, :3]
+        trace = float(np.trace(rotation))
+        if trace > 0.0:
+            scale = math.sqrt(trace + 1.0) * 2.0
+            qw = 0.25 * scale
+            qx = float(rotation[2, 1] - rotation[1, 2]) / scale
+            qy = float(rotation[0, 2] - rotation[2, 0]) / scale
+            qz = float(rotation[1, 0] - rotation[0, 1]) / scale
+        else:
+            axis = int(np.argmax(np.diag(rotation)))
+            if axis == 0:
+                scale = math.sqrt(1.0 + float(rotation[0, 0]) - float(rotation[1, 1]) - float(rotation[2, 2])) * 2.0
+                qw = float(rotation[2, 1] - rotation[1, 2]) / scale
+                qx = 0.25 * scale
+                qy = float(rotation[0, 1] + rotation[1, 0]) / scale
+                qz = float(rotation[0, 2] + rotation[2, 0]) / scale
+            elif axis == 1:
+                scale = math.sqrt(1.0 + float(rotation[1, 1]) - float(rotation[0, 0]) - float(rotation[2, 2])) * 2.0
+                qw = float(rotation[0, 2] - rotation[2, 0]) / scale
+                qx = float(rotation[0, 1] + rotation[1, 0]) / scale
+                qy = 0.25 * scale
+                qz = float(rotation[1, 2] + rotation[2, 1]) / scale
+            else:
+                scale = math.sqrt(1.0 + float(rotation[2, 2]) - float(rotation[0, 0]) - float(rotation[1, 1])) * 2.0
+                qw = float(rotation[1, 0] - rotation[0, 1]) / scale
+                qx = float(rotation[0, 2] + rotation[2, 0]) / scale
+                qy = float(rotation[1, 2] + rotation[2, 1]) / scale
+                qz = 0.25 * scale
         return {"x": float(matrix[0, 3]), "y": float(matrix[1, 3]),
-                "z": float(matrix[2, 3]), "rx": roll, "ry": pitch, "rz": yaw}
+                "z": float(matrix[2, 3]), "rx": roll, "ry": pitch, "rz": yaw,
+                "qx": qx, "qy": qy, "qz": qz, "qw": qw}
 
     def _advance_simulation_jog(self, now_mono: float) -> None:
         if self._simulation_jog.get("state") != "JOGGING":
@@ -311,6 +368,101 @@ class WebRuntime:
             LOG.warning("Web平台以SIMULATION模式启动；命令仅进入内存模拟器")
             return False
         return self.ros.connect()
+
+    def _trajectory_feedback_snapshot(self) -> Dict[str, Any]:
+        if self.simulation:
+            with self._simulation_lock:
+                return self._simulation_snapshot()
+        if self.offline:
+            return self._offline_snapshot()
+        return self.ros.telemetry_snapshot()
+
+    def _execute_trajectory_points(
+        self, points: List[Dict[str, Any]], progress_callback: Any,
+    ) -> Dict[str, Any]:
+        if self.simulation:
+            positions = [np.asarray(point["positions"], dtype=float) for point in points]
+            times = [float(point["time_from_start"]) for point in points]
+            with self._simulation_lock:
+                if self._simulation_operator_state == RobotState.SAFE_STOP.value:
+                    raise RuntimeError("SIMULATION SAFE_STOP已锁存，必须先恢复")
+                start_error = float(np.max(np.abs(
+                    self._simulation_joints - positions[0]
+                )))
+                if start_error > float(self.config.get("joint_control", {}).get(
+                        "trajectory_start_tolerance_rad", 0.05)):
+                    raise RuntimeError(
+                        "当前关节与轨迹起点误差{:.4f}rad过大".format(start_error)
+                    )
+                self._simulation_trajectory_cancel.clear()
+                self._simulation_operator_state = RobotState.JOINT_CONTROL.value
+                self._simulation_stop_reason = ""
+            started = time.monotonic()
+            progress_index = 0
+            try:
+                while True:
+                    if self._simulation_trajectory_cancel.is_set():
+                        with self._simulation_lock:
+                            self._simulation_target = self._simulation_joints.copy()
+                            self._simulation_operator_state = RobotState.IDLE.value
+                        return {"cancelled": True, "status": "PREEMPTED"}
+                    if not self.sessions.snapshot().get("active"):
+                        with self._simulation_lock:
+                            self._simulation_target = self._simulation_joints.copy()
+                            self._simulation_operator_state = RobotState.IDLE.value
+                            self._simulation_stop_reason = "web control lease expired"
+                        return {"cancelled": True, "status": "LEASE_EXPIRED"}
+                    elapsed = time.monotonic() - started
+                    segment = min(
+                        max(0, int(np.searchsorted(times, elapsed, side="right") - 1)),
+                        len(points) - 2,
+                    )
+                    interval = max(1e-9, times[segment + 1] - times[segment])
+                    ratio = min(1.0, max(0.0, (elapsed - times[segment]) / interval))
+                    desired = positions[segment] + ratio * (
+                        positions[segment + 1] - positions[segment]
+                    )
+                    with self._simulation_lock:
+                        self._simulation_target = desired
+                        feedback = self._simulation_snapshot()
+                        actual = np.asarray(
+                            [feedback["joints"][name] for name in JOINT_NAMES], dtype=float
+                        )
+                    progress = self.joint_adapter.feedback_progress(
+                        actual, positions, progress_index
+                    )
+                    progress_index = int(progress["current_point"])
+                    progress_callback(progress)
+                    final_error = float(np.max(np.abs(actual - positions[-1])))
+                    if elapsed >= times[-1] and final_error <= 0.01:
+                        with self._simulation_lock:
+                            self._simulation_target = positions[-1].copy()
+                            self._simulation_operator_state = RobotState.IDLE.value
+                        return {"cancelled": False, "status": "SUCCEEDED",
+                                "max_error_rad": final_error}
+                    if elapsed > times[-1] + 5.0:
+                        raise RuntimeError("SIMULATION轨迹跟踪超时")
+                    time.sleep(0.01)
+            except Exception as error:
+                with self._simulation_lock:
+                    self._simulation_target = self._simulation_joints.copy()
+                    self._simulation_operator_state = RobotState.SAFE_STOP.value
+                    self._simulation_stop_reason = str(error)
+                raise
+        if self.offline:
+            raise RuntimeError("OFFLINE模式禁止执行轨迹")
+        return self._run_on_control_path(
+            "joint_control", ("base",),
+            lambda: self.tasks.execute_trajectory(points, progress_callback),
+        )
+
+    def _stop_trajectory_execution(self) -> Dict[str, Any]:
+        if self.simulation:
+            self._simulation_trajectory_cancel.set()
+            with self._simulation_lock:
+                self._simulation_target = self._simulation_joints.copy()
+            return {"cancel_requested": True, "simulation": True}
+        return self.tasks.cancel_joint_control()
 
     def next_sequence(self) -> int:
         with self._sequence_lock:
@@ -389,6 +541,7 @@ class WebRuntime:
         )
         raw["sampling_hardware"] = self.hardware.snapshot()
         raw["tool5_drill"] = self.tool5_drill.snapshot()
+        raw["trajectory_execution"] = self.trajectories.execution_status()
         if self.simulation:
             raw["cartesian_jog"] = dict(self._simulation_jog)
         else:
@@ -492,9 +645,7 @@ class WebRuntime:
                 "wrench": {"Fx": 0.12 * math.sin(phase), "Fy": 0.08 * math.cos(phase),
                            "Fz": force_z, "Tx": 0.01 * math.sin(phase * 0.7),
                            "Ty": 0.01 * math.cos(phase * 0.8), "Tz": 0.0},
-                "tcp": {"x": float(tcp_matrix[0, 3]), "y": float(tcp_matrix[1, 3]),
-                        "z": float(tcp_matrix[2, 3]), "rx": roll,
-                        "ry": pitch, "rz": yaw},
+                "tcp": self._matrix_pose(tcp_matrix),
                 "fresh": {"joints": True, "wrench": True, "tcp": True,
                           "image": self._simulation_subsystems["camera"]},
                 "ages": {"joints": 0.0, "wrench": 0.0, "tcp": 0.0, "image": 0.0},
@@ -518,7 +669,7 @@ class WebRuntime:
                 "stop_reason": self._simulation_stop_reason,
                 "tool_voltage": self._simulation_voltage,
                 "image_topic": "/simulation/camera/color/image_raw",
-                "source_stamps": {"joints": now, "wrench": now, "image": now},
+                "source_stamps": {"joints": now, "tcp": now, "wrench": now, "image": now},
                 "sequences": {"image": int(phase * 6.0)},
             }
 
@@ -1539,6 +1690,10 @@ class WebRuntime:
 
     def close(self) -> None:
         try:
+            try:
+                self.trajectories.stop()
+            except Exception:
+                LOG.exception("Web关闭时轨迹停止请求失败")
             if not self.offline and not self.simulation:
                 try:
                     status = self.cartesian_jog_status()

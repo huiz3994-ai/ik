@@ -17,6 +17,7 @@ setup_args = generate_distutils_setup(
         "rm75_sampling_gui.logger",
         "rm75_sampling_gui.model",
         "rm75_sampling_gui.control",
+        "rm75_sampling_gui.trajectory",
         "rm75_sampling_gui.web",
         "rm75_sampling_gui.web.backend",
     ],

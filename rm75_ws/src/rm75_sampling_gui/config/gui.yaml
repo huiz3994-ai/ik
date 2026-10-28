@@ -61,6 +61,13 @@ joint_control:
   cancel_timeout_s: 4.0
   jog_repeat_ms: 180
 
+# Reusable manually taught joint trajectories. Acceleration limits are
+# conservative software limits because the vendor URDF exposes velocity only.
+trajectory_library:
+  directory: "~/.ros/rm75_sampling_gui/trajectories"
+  acceleration_limits_rad_s2: [1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5]
+  collision_check_required: true
+
 # base_link translation + local Link7 rotation. These values mirror the
 # deployed Cartesian commissioning envelope and are enforced again by the ROS
 # executor; the browser cannot override them.

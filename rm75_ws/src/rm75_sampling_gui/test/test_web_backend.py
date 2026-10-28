@@ -348,6 +348,208 @@ def test_control_path_switch_requires_live_exclusive_lease():
             assert runtime.commands == ["path:z_force"]
 
 
+def test_trajectory_api_crud_twenty_points_generation_id_execution_and_stop(tmp_path):
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    config["trajectory_library"]["directory"] = str(tmp_path / "trajectories")
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    cancel = threading.Event()
+    started = threading.Event()
+
+    def executor(points, callback):
+        callback({"current_point": 1, "total_points": len(points),
+                  "progress": 0.25, "max_error_rad": 0.002})
+        started.set()
+        cancel.wait(2.0)
+        return {"cancelled": True, "status": "PREEMPTED"}
+
+    runtime.trajectories.executor = executor
+    runtime.trajectories.stop_executor = (
+        lambda: cancel.set() or {"cancel_requested": True, "simulation": True}
+    )
+    with TestClient(create_app(runtime)) as client:
+        assert client.get("/api/v1/trajectories").status_code == 200
+        assert client.post("/api/v1/trajectories", json={"name": "无租约"}).status_code == 401
+
+        lease = runtime.sessions.acquire("trajectory api")
+        runtime.sessions.bind_websocket(lease["session_id"], "trajectory-test-socket")
+        headers = {"X-RM75-Control-Session": lease["session_id"]}
+        created = client.post("/api/v1/trajectories", headers=headers, json={
+            "name": "采样撤离路径01", "trajectory_id": "sampling_retreat_01",
+        })
+        assert created.status_code == 200
+        assert created.json()["trajectory_id"] == "sampling_retreat_01"
+
+        for _ in range(20):
+            response = client.post(
+                "/api/v1/trajectories/sampling_retreat_01/waypoints",
+                headers=headers,
+            )
+            assert response.status_code == 200
+        document = client.get(
+            "/api/v1/trajectories/sampling_retreat_01"
+        ).json()
+        assert len(document["waypoints"]) == 20
+        assert document["trajectory_status"]["state"] == "STALE"
+
+        generated = client.post(
+            "/api/v1/trajectories/sampling_retreat_01/generate", headers=headers
+        )
+        assert generated.status_code == 200
+        assert generated.json()["trajectory_status"]["state"] == "READY"
+        assert len(generated.json()["trajectory"]) > 20
+
+        updated = client.put(
+            "/api/v1/trajectories/sampling_retreat_01", headers=headers, json={
+                "name": "采样撤离路径01（更新）",
+                "trajectory_config": {"speed_scale": 0.3, "acceleration_scale": 0.25},
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["name"].endswith("（更新）")
+        assert updated.json()["trajectory_status"]["state"] == "STALE"
+        assert client.post(
+            "/api/v1/trajectories/sampling_retreat_01/generate", headers=headers
+        ).status_code == 200
+
+        waypoint_id = document["waypoints"][1]["waypoint_id"]
+        moved = client.post(
+            "/api/v1/trajectories/sampling_retreat_01/waypoints/{}/move".format(
+                waypoint_id),
+            headers=headers, json={"direction": "up"},
+        )
+        assert moved.status_code == 200
+        assert moved.json()["trajectory_status"]["state"] == "STALE"
+        regenerated = client.post(
+            "/api/v1/trajectories/sampling_retreat_01/generate", headers=headers
+        )
+        assert regenerated.status_code == 200
+
+        execute = client.post(
+            "/api/v1/trajectories/sampling_retreat_01/execute", headers=headers
+        )
+        assert execute.status_code == 200
+        assert execute.json()["trajectory_id"] == "sampling_retreat_01"
+        assert started.wait(1.0)
+        status = client.get("/api/v1/trajectories/execution/status").json()
+        assert status["state"] == "EXECUTING"
+        assert status["progress"] == pytest.approx(0.25)
+        stopped = client.post(
+            "/api/v1/trajectories/execution/stop", headers=headers
+        )
+        assert stopped.status_code == 200
+        assert stopped.json()["cancel_requested"] is True
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            status = client.get("/api/v1/trajectories/execution/status").json()
+            if status["state"] != "EXECUTING":
+                break
+            time.sleep(0.01)
+        assert status["state"] == "CANCELLED"
+
+        listing = client.get("/api/v1/trajectories").json()["trajectories"]
+        assert listing[0]["trajectory_id"] == "sampling_retreat_01"
+        assert client.delete(
+            "/api/v1/trajectories/sampling_retreat_01", headers=headers
+        ).status_code == 200
+
+
+def test_simulation_saved_trajectory_executor_tracks_feedback_to_completion(tmp_path):
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    config["trajectory_library"]["directory"] = str(tmp_path / "trajectories")
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    try:
+        lease = runtime.sessions.acquire("simulation trajectory")
+        runtime.sessions.bind_websocket(lease["session_id"], "simulation-trajectory-socket")
+        document = runtime.trajectories.create(
+            "simulation execution", trajectory_id="simulation_execution"
+        )
+        document = runtime.trajectories.record_current_waypoint(document["trajectory_id"])
+        document = runtime.trajectories.record_current_waypoint(document["trajectory_id"])
+        start = document["waypoints"][0]["joint_positions"]
+        target = list(start)
+        target[0] += 0.08
+        document["waypoints"][1]["joint_positions"] = target
+        document["trajectory"] = [
+            {"positions": start, "velocities": [0.0] * 7,
+             "accelerations": [0.0] * 7, "time_from_start": 0.0},
+            {"positions": [(a + b) / 2.0 for a, b in zip(start, target)],
+             "velocities": [0.2] + [0.0] * 6,
+             "accelerations": [0.0] * 7, "time_from_start": 0.3},
+            {"positions": target, "velocities": [0.0] * 7,
+             "accelerations": [0.0] * 7, "time_from_start": 0.6},
+        ]
+        document["trajectory_status"].update({
+            "state": "READY", "message": "ready", "waypoint_indices": [0, 2],
+            "trajectory_point_count": 3, "duration_s": 0.6,
+        })
+        runtime.trajectories.save(document)
+
+        runtime.trajectories.execute("simulation_execution")
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            status = runtime.trajectories.execution_status()
+            if status["state"] != "EXECUTING":
+                break
+            time.sleep(0.02)
+
+        assert status["state"] == "COMPLETED"
+        assert status["progress"] == pytest.approx(1.0)
+        actual = runtime.snapshot()["joints"]
+        assert actual["joint1"] == pytest.approx(target[0], abs=0.015)
+        assert runtime.snapshot()["operator_state"] == "IDLE"
+    finally:
+        runtime.close()
+
+
+def test_simulation_saved_trajectory_stops_when_control_lease_is_lost(tmp_path):
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    config["trajectory_library"]["directory"] = str(tmp_path / "trajectories")
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    try:
+        lease = runtime.sessions.acquire("lease loss trajectory")
+        runtime.sessions.bind_websocket(lease["session_id"], "lease-loss-socket")
+        document = runtime.trajectories.create("lease loss", trajectory_id="lease_loss")
+        document = runtime.trajectories.record_current_waypoint("lease_loss")
+        document = runtime.trajectories.record_current_waypoint("lease_loss")
+        start = document["waypoints"][0]["joint_positions"]
+        target = list(start)
+        target[0] += 0.15
+        document["waypoints"][1]["joint_positions"] = target
+        document["trajectory"] = [
+            {"positions": start, "velocities": [0.0] * 7,
+             "accelerations": [0.0] * 7, "time_from_start": 0.0},
+            {"positions": target, "velocities": [0.0] * 7,
+             "accelerations": [0.0] * 7, "time_from_start": 2.0},
+        ]
+        document["trajectory_status"].update({
+            "state": "READY", "message": "ready", "waypoint_indices": [0, 1],
+            "trajectory_point_count": 2, "duration_s": 2.0,
+        })
+        runtime.trajectories.save(document)
+        runtime.trajectories.execute("lease_loss")
+        time.sleep(0.05)
+
+        runtime.sessions.release(lease["session_id"], "lease-loss-socket")
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            status = runtime.trajectories.execution_status()
+            if status["state"] != "EXECUTING":
+                break
+            time.sleep(0.02)
+
+        assert status["state"] == "CANCELLED"
+        assert runtime.snapshot()["operator_state"] == "IDLE"
+    finally:
+        runtime.close()
+
+
 def test_limit_recovery_runner_accepts_diagnostic_exit_code_two(tmp_path, monkeypatch):
     script = tmp_path / "limit_tool.py"
     script.write_text(
