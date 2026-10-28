@@ -150,12 +150,14 @@ class ControlLaunchManager:
                 ])
                 if mode == "tool5_drill":
                     drill = dict(self._config.get("tool5_drill", {}))
+                    require_force = bool(drill.get(
+                        "require_force_feedback", False))
                     arguments.extend([
                         "tool5_drill_enabled:=true",
+                        "tool5_require_force_feedback:={}".format(
+                            str(require_force).lower()),
                         "tool5_drill_max_feed_travel:={}".format(
                             float(drill.get("max_feed_travel_m", 0.05))),
-                        "desired_force:={}".format(
-                            float(drill.get("desired_force_n", -10.0))),
                         "max_z_velocity:={}".format(
                             float(drill.get("max_z_velocity_m_s", 0.002))),
                         "force_limit:={}".format(
@@ -165,6 +167,12 @@ class ControlLaunchManager:
                         "max_external_torque:={}".format(
                             float(drill.get("max_torque_nm", 5.0))),
                     ])
+                    # Position-fed Tool5 drilling does not use a force
+                    # setpoint.  Passing its UI placeholder through used to
+                    # invalidate the shared force controller at startup.
+                    if require_force:
+                        arguments.append("desired_force:={}".format(
+                            float(drill.get("desired_force_n", -50.0))))
             arguments.extend([
                 "start_touch_driver:={}".format(
                     "false" if mode == "tool5_drill" or touch_driver_live else "true"
@@ -253,6 +261,7 @@ class TaskManager:
             values = {
                 "execution_enabled": enabled,
                 "joint_control_execution_authorized": path == "joint_control",
+                "cartesian_jog_execution_authorized": path == "cartesian_jog",
                 "touch_z_force_authorized": path == "z_force",
                 "tool5_drill_authorized": path == "tool5_drill",
                 "trajectory_execution_authorized": path in {"pose_pickup", "qr_pickup"},
@@ -303,6 +312,13 @@ class TaskManager:
 
         if self.joint_adapter is not None and self.joint_adapter.active:
             return "joint_control"
+        try:
+            jog_state = str(self.ros.telemetry_snapshot().get(
+                "cartesian_jog", {}).get("state", "IDLE"))
+            if jog_state in {"JOGGING", "STOPPING", "LIMIT_REACHED"}:
+                return "cartesian_jog"
+        except Exception:
+            pass
         mode = self.launches.mode
         return mode if mode in ("teleop", "z_force_teleop", "force_control", "tool5_drill") else None
 
@@ -565,8 +581,8 @@ class TaskManager:
                 if int(result.get("holding_slot", -1)) != slot_id:
                     raise TaskManagerError("取工具结束但未记录slot {}".format(slot_id))
                 self.state_machine.transition(
-                    RobotState.TOOL_HOLD,
-                    "Tool{} 24V ACK完成并退回观察位".format(slot_id))
+                    RobotState.IDLE,
+                    "Tool{} 24V ACK完成并退回观察位；可启动遥操作".format(slot_id))
                 return result
             except Exception as error:
                 self._fail_safe(error, "公共标记自动取工具")
@@ -611,8 +627,8 @@ class TaskManager:
                 if not result.get("executed"):
                     raise TaskManagerError("配置取物任务未报告执行完成")
                 self.state_machine.transition(
-                    RobotState.TOOL_HOLD,
-                    "Tool{}运动完成；物体在位未独立确认".format(slot_id))
+                    RobotState.IDLE,
+                    "Tool{}运动完成；可启动遥操作，物体在位未独立确认".format(slot_id))
                 return result
             except Exception as error:
                 self._fail_safe(error, "五工具配置取物")
@@ -695,11 +711,19 @@ class TaskManager:
             if int(result.get("voltage_v", -1)) != 24:
                 raise TaskManagerError("恢复持有状态未取得24V ACK")
             self.state_machine.transition(
-                RobotState.TOOL_HOLD,
-                "监督确认Tool{}仍保持吸合".format(slot_id))
+                RobotState.IDLE,
+                "监督确认Tool{}仍保持吸合；可启动遥操作".format(slot_id))
             return result
 
     def cancel_target_execution(self) -> Dict[str, Any]:
+        health = self.ros.telemetry_snapshot().get("health", {})
+        if not health.get("qr", False):
+            LOGGER.info("五目标服务离线；二维码/配置取物任务已处于停止状态")
+            return {
+                "cancelled": True,
+                "already_stopped": True,
+                "service_online": False,
+            }
         return self.ros.call_five_target_task(
             "cancel", 0, execute=False)
 
@@ -728,7 +752,8 @@ class TaskManager:
                     raise TaskManagerError(
                         "QR task did not reach HOLDING: {}".format(result.get("state"))
                     )
-                self.state_machine.transition(RobotState.TOOL_HOLD, "工具已取出并确认持有")
+                self.state_machine.transition(
+                    RobotState.IDLE, "工具已取出并确认持有；可启动遥操作")
                 return result
             except Exception as error:
                 self._fail_safe(error, "取工具")
@@ -806,7 +831,11 @@ class TaskManager:
                 self.launches.start("tool5_drill")
                 self.ros.wait_for_node(
                     "/rm75_vertical_press", self.config["node_start_timeout_s"])
-                self.ros.wait_for_force_feedback(self.config["feedback_timeout_s"])
+                self.ros.wait_for_tool5_drill_command_ready(
+                    self.config["node_start_timeout_s"])
+                if bool(dict(self.config.get("tool5_drill", {})).get(
+                        "require_force_feedback", False)):
+                    self.ros.wait_for_force_feedback(self.config["feedback_timeout_s"])
                 self.state_machine.transition(
                     RobotState.FORCE_CONTROL, "Tool5钻进控制器已就绪")
                 return {"mode": "tool5_drill", "prepared": True}
@@ -937,7 +966,6 @@ class TaskManager:
                 status = self.ros.call_five_target_task(
                     "status", 0, execute=False)
                 holding_slot = status.get("holding_slot")
-                target = RobotState.IDLE
                 if holding_slot is not None:
                     slot_id = int(holding_slot)
                     matches = [
@@ -948,8 +976,9 @@ class TaskManager:
                         raise TaskManagerError(
                             "五目标服务报告未知持有槽位{}".format(slot_id))
                     self.selected_tool = matches[0]
-                    target = RobotState.TOOL_HOLD
-                self.state_machine.transition(target, "恢复检查完成")
+                self.state_machine.transition(
+                    RobotState.IDLE,
+                    "恢复检查完成；持有工具不锁定遥操作")
                 return {"driver": clear_result, "task": status}
             except Exception as error:
                 self.state_machine.fail(error, "恢复失败")

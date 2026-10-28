@@ -19,7 +19,7 @@ from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import Bool, Float64, String
 from rm_msgs.msg import Six_Force
 from rm75_sampling_gui.gui.main_window import MainWindow
-from rm75_sampling_gui.ros.ros_interface import ROSInterface
+from rm75_sampling_gui.ros.ros_interface import ROSInterface, ROSInterfaceError
 from rm75_sampling_gui.ros.monitoring import Monitor
 from rm75_sampling_gui.state.state_machine import RobotState, StateMachine, StateTransition, StateTransitionError
 from rm75_sampling_gui.task.task_manager import TaskManager, ControlLaunchManager
@@ -128,16 +128,34 @@ class StationTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemLaunchError, "外部运动命令源"):
                 manager.start("base")
 
+    def test_status_does_not_report_owned_qr_node_as_external_pose(self):
+        manager = SystemLaunchManager(self.config, execution_enabled=False)
+        qr_process = Mock()
+        qr_process.poll.return_value = None
+        manager._processes["qr"] = qr_process
+        live = ["/rm75_qr_marker", "/rm75_five_target_server"]
+
+        with patch("rosnode.get_node_names", return_value=live):
+            status = manager.status()
+
+        self.assertTrue(status["qr"]["running"])
+        self.assertTrue(status["qr"]["owned"])
+        self.assertFalse(status["pose"]["running"])
+        self.assertFalse(status["pose"]["owned"])
+        self.assertTrue(status["pose"]["shadowed_by_owned_launch"])
+
     def test_system_manager_switches_only_one_control_path_while_stopped(self):
         manager = SystemLaunchManager(self.config, execution_enabled=False)
         with patch("rosnode.get_node_names", return_value=[]):
             manager.set_control_path("joint_control")
             self.assertTrue(manager._joint_control_execution_authorized)
+            self.assertFalse(manager._cartesian_jog_execution_authorized)
             self.assertFalse(manager._trajectory_execution_authorized)
             self.assertFalse(manager._touch_z_force_authorized)
             self.assertFalse(manager._tool5_drill_authorized)
             manager.set_control_path("tool5_drill")
             self.assertFalse(manager._joint_control_execution_authorized)
+            self.assertFalse(manager._cartesian_jog_execution_authorized)
             self.assertFalse(manager._trajectory_execution_authorized)
             self.assertFalse(manager._touch_z_force_authorized)
             self.assertTrue(manager._tool5_drill_authorized)
@@ -145,7 +163,8 @@ class StationTest(unittest.TestCase):
     def test_joint_base_uses_high_follow_without_changing_legacy_mode(self):
         launch = (ROOT / "launch/base_real.launch").read_text()
         self.assertIn(
-            '<arg name="driver_follow" default="$(arg joint_control_execution_authorized)"/>',
+            "default=\"$(eval arg('joint_control_execution_authorized') or "
+            "arg('cartesian_jog_execution_authorized'))\"/>",
             launch,
         )
         self.assertIn('<arg name="Follow" value="$(arg driver_follow)"/>', launch)
@@ -478,6 +497,8 @@ class TelemetryTest(unittest.TestCase):
             arguments = spawn.call_args[0][0]
             self.assertIn("tool5_drill_enabled:=true", arguments)
             self.assertIn("force_limit:=60.0", arguments)
+            self.assertFalse(any(value.startswith("desired_force:=")
+                                 for value in arguments))
             self.assertIn("start_touch_driver:=false", arguments)
             self.assertIn("start_touch_helpers:=false", arguments)
             self.assertNotIn("/rm_driver/JointPos", arguments)
@@ -518,9 +539,47 @@ class TelemetryTest(unittest.TestCase):
         self.assertEqual(set(names), {"/rm_driver/SetToolVoltage", "/rm_driver/Emergency_Stop",
                                       "/rm_driver/Clear_System_Err",
                                       "/rm75_sampling_gui/joint_control_heartbeat",
+                                      "/rm75_sampling_gui/cartesian_jog_heartbeat",
                                       "/rm75_vertical_press/drill_start_depth_m",
                                       "/rm75_vertical_press/drill_stop_feed"})
         self.assertNotIn("/rm_driver/JointPos", names)
+
+    def test_tool5_motor_gate_waits_for_fresh_drilling_state(self):
+        ros = ROSInterface({"ack_timeout_s": 0.1})
+        ros._connected = True
+
+        class DrillPublisher:
+            @staticmethod
+            def get_num_connections():
+                return 1
+
+            @staticmethod
+            def publish(_message):
+                ros._tool5_drill_state_callback(String(data="DRILLING"))
+
+        ros._tool5_drill_start_pub = DrillPublisher()
+        ros.start_tool5_drill(0.01)
+        self.assertEqual(ros.telemetry_snapshot()["tool5_drill_state"],
+                         "DRILLING")
+
+    def test_tool5_motor_gate_rejects_bottom_safe_stop(self):
+        ros = ROSInterface({"ack_timeout_s": 0.1})
+        ros._connected = True
+        ros._set_telemetry("stop_reason", "injected drill rejection")
+
+        class DrillPublisher:
+            @staticmethod
+            def get_num_connections():
+                return 1
+
+            @staticmethod
+            def publish(_message):
+                ros._tool5_drill_state_callback(String(data="SAFE_STOP"))
+
+        ros._tool5_drill_start_pub = DrillPublisher()
+        with self.assertRaisesRegex(ROSInterfaceError,
+                                    "injected drill rejection"):
+            ros.start_tool5_drill(0.01)
 
 
 if __name__ == "__main__":

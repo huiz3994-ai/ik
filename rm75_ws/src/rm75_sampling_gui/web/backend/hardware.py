@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 LOG = logging.getLogger("rm75_sampling_gui.web.hardware")
@@ -208,7 +208,9 @@ class SamplingHardware:
         return {"ok": True, "pump_on": on, "relay_state": mask}
 
     def motor_command(self, name: str, speed: float = 0.5,
-                      duration: float = 3.0) -> Dict[str, Any]:
+                      duration: float = 3.0,
+                      on_started: Optional[Callable[[], None]] = None
+                      ) -> Dict[str, Any]:
         allowed = {"forward", "reverse", "dig", "dig_continuous", "stop", "status"}
         if name not in allowed:
             raise ValueError("不允许的电机命令：{}".format(name))
@@ -216,6 +218,8 @@ class SamplingHardware:
             raise ValueError("电机速度必须在0到1.0 rad/s之间")
         if not 0.0 < float(duration) <= MOTOR_MAX_DURATION_S:
             raise ValueError("电机运行时间必须在0到60秒之间")
+        if on_started is not None and name != "dig_continuous":
+            raise ValueError("启动回调仅适用于连续钻进命令")
         if self.simulation:
             if name == "dig_continuous":
                 self._simulation_motor_stop.clear()
@@ -223,6 +227,8 @@ class SamplingHardware:
                     self._motor.update({"online": True, "busy": True,
                                         "command": name, "status": "SIMULATION连续旋转",
                                         "updated": time.time()})
+                if on_started is not None:
+                    on_started()
                 self._simulation_motor_stop.wait()
                 with self._lock:
                     self._motor.update({"busy": False, "status": "SIMULATION已停止并失能",
@@ -272,6 +278,8 @@ class SamplingHardware:
                 universal_newlines=True, bufsize=1)
             with self._lock:
                 self._motor_process = process
+            if on_started is not None:
+                on_started()
             try:
                 if name == "dig_continuous":
                     process.wait()

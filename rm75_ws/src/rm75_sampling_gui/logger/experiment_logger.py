@@ -108,7 +108,7 @@ class ExperimentLogger(logging.Handler):
     def _transition(self, event: StateTransition) -> None:
         if not self.active and event.current in (
                 RobotState.TELEOP, RobotState.TOOL_DETECT, RobotState.TOOL_PICK,
-                RobotState.TOOL_HOLD, RobotState.FORCE_CONTROL):
+                RobotState.FORCE_CONTROL):
             self._begin()
         self._event("{} STATE {} -> {}: {}".format(
             datetime.now(timezone.utc).isoformat(), event.previous.value,

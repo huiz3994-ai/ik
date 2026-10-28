@@ -22,6 +22,7 @@
 #include <std_msgs/String.h>
 #include <std_msgs/UInt16.h>
 
+#include "rm75_vertical_press/tool5_feed.h"
 #include "rm75_touch_teleop/hybrid_force_control.h"
 #include "rm75_touch_teleop/mapping.h"
 
@@ -160,6 +161,8 @@ class VerticalPressController {
     private_nh_.param("vertical_alignment_tolerance",
                       vertical_alignment_tolerance_, 0.0523598776);
     private_nh_.param("tool5_drill_enabled", tool5_drill_enabled_, false);
+    private_nh_.param("tool5_require_force_feedback",
+                      tool5_require_force_feedback_, false);
     private_nh_.param("tool5_drill_max_feed_travel",
                       tool5_drill_max_feed_travel_, 0.05);
 
@@ -327,22 +330,22 @@ class VerticalPressController {
       return;
     }
     const ros::WallTime now = ros::WallTime::now();
-    if (!motion_enabled_ || !force_frame_verified_ || !coordinateReady(now) ||
-        !have_joint_state_ || !have_force_ ||
+    const bool force_ready = force_frame_verified_ && coordinateReady(now) &&
+        have_force_ &&
+        (now - last_force_time_).toSec() <= force_feedback_timeout_ &&
+        !forceLimitExceeded();
+    if (!motion_enabled_ || !have_joint_state_ ||
         (now - last_joint_time_).toSec() > input_timeout_ ||
-        (now - last_force_time_).toSec() > force_feedback_timeout_ ||
-        forceLimitExceeded() || !latest_state_->satisfiesBounds(joint_group_)) {
-      safetyStop("Tool5 drill preflight failed: motion, joint, force, coordinate, or limit check");
+        !latest_state_->satisfiesBounds(joint_group_)) {
+      safetyStop("Tool5 drill preflight failed: motion, joint, or limit check");
+      return;
+    }
+    if (tool5_require_force_feedback_ && !force_ready) {
+      safetyStop("Tool5 drill preflight failed: required force feedback is unavailable");
       return;
     }
     const Eigen::Isometry3d measured =
         latest_state_->getGlobalLinkTransform(tip_link_);
-    const double alignment_cosine = std::max(-1.0, std::min(1.0,
-        measured.linear().col(2).dot(Eigen::Vector3d(0.0, 0.0, -1.0))));
-    if (std::acos(alignment_cosine) > vertical_alignment_tolerance_) {
-      safetyStop("Tool5 drill preflight failed: tool axis is not vertical");
-      return;
-    }
     robot_anchor_ = target_pose_ = measured;
     robot_orientation_anchor_ = measured.linear();
     *command_seed_ = *latest_state_;
@@ -351,10 +354,15 @@ class VerticalPressController {
     drill_start_z_ = measured.translation().z();
     drill_target_depth_ = message->data;
     drill_actual_depth_ = 0.0;
-    hybrid_.beginContact(drill_start_z_);
-    if (hybrid_.mode != rm75_touch_teleop::ControlMode::CONTACT_MODE) {
-      safetyStop("Tool5 drill preflight failed: force loop could not enter contacted mode");
-      return;
+    drill_force_control_active_ = tool5_require_force_feedback_ && force_ready;
+    if (drill_force_control_active_) {
+      hybrid_.beginForceFeed(drill_start_z_);
+      if (hybrid_.mode != rm75_touch_teleop::ControlMode::CONTACT_MODE) {
+        safetyStop("Tool5 drill start failed: force feed could not start");
+        return;
+      }
+    } else {
+      hybrid_.reset(drill_start_z_);
     }
     last_update_time_ = now;
     stop_latched_ = false;
@@ -367,7 +375,9 @@ class VerticalPressController {
     publishMode();
     publishDrillState("DRILLING");
     publishDrillDepth();
-    ROS_WARN("Tool5 contacted drill feed engaged: target depth %.4f m", drill_target_depth_);
+    ROS_WARN("Tool5 direct Z drill feed engaged from current pose: target depth %.4f m, mode=%s",
+             drill_target_depth_,
+             drill_force_control_active_ ? "FORCE" : "BOUNDED_POSITION");
   }
 
   void drillStopCallback(const std_msgs::Empty::ConstPtr&) {
@@ -521,15 +531,17 @@ class VerticalPressController {
     const double dt = std::min(1.0 / publish_rate_, std::max(0.0, elapsed));
     const bool drill = drill_active_ || drill_holding_;
     const bool direct = !drill && grey_pressed_ && white_pressed_;
+    const bool force_feedback_needed = !drill || drill_force_control_active_;
     if ((!drill && ((now - last_touch_time_).toSec() > input_timeout_ ||
                     (now - last_joy_time_).toSec() > input_timeout_)) ||
         (now - last_joint_time_).toSec() > input_timeout_ ||
-        !have_force_ ||
-        (now - last_force_time_).toSec() > force_feedback_timeout_) {
+        (force_feedback_needed && (!have_force_ ||
+         (now - last_force_time_).toSec() > force_feedback_timeout_))) {
       safetyStop("Touch, joint, increment, button, or force feedback timed out");
       return;
     }
-    if (!coordinateReady(now) || forceLimitExceeded()) {
+    if ((force_feedback_needed && !coordinateReady(now)) ||
+        (have_force_ && forceLimitExceeded())) {
       safetyStop("force coordinate or wrench safety check failed");
       return;
     }
@@ -564,11 +576,19 @@ class VerticalPressController {
         publishMeasuredHold();
         return;
       }
-      if (hybrid_.mode != rm75_touch_teleop::ControlMode::CONTACT_MODE) {
-        safetyStop("Tool5 drill force loop left contacted mode");
-        return;
+      if (drill_force_control_active_) {
+        if (hybrid_.mode != rm75_touch_teleop::ControlMode::CONTACT_MODE) {
+          safetyStop("Tool5 drill force loop left force-feed mode");
+          return;
+        }
+        target_pose_.translation().z() = hybrid_.nextZ(measured_z, dt);
+      } else {
+        // Tool5 has its own reviewed Z velocity supplied as max_z_velocity.
+        // Do not reuse the much faster manual dual-button direct-press speed.
+        target_pose_.translation().z() -=
+            rm75_vertical_press::boundedTool5FeedStep(
+                hybrid_.cfg.max_z_step, hybrid_.cfg.max_z_velocity, dt);
       }
-      target_pose_.translation().z() = hybrid_.nextZ(measured_z, dt);
       const double proposed_depth =
           drill_start_z_ - target_pose_.translation().z();
       if (proposed_depth >= drill_target_depth_) {
@@ -664,12 +684,17 @@ class VerticalPressController {
           fraction * (desired[index] - last_command_[index]);
     }
 
-    if ((white_pressed_ || drill_active_) &&
-        hybrid_.mode == rm75_touch_teleop::ControlMode::CONTACT_MODE) {
+    const bool bounded_drill_position =
+        drill_active_ && !drill_force_control_active_;
+    if (((white_pressed_ || drill_active_) &&
+         hybrid_.mode == rm75_touch_teleop::ControlMode::CONTACT_MODE) ||
+        bounded_drill_position) {
       const double old_z =
           command_seed_->getGlobalLinkTransform(tip_link_).translation().z();
-      const double z_bound = std::min(hybrid_.cfg.max_z_step,
-                                      hybrid_.cfg.max_z_velocity * dt);
+      const double z_bound = bounded_drill_position ?
+          rm75_vertical_press::boundedTool5FeedStep(
+              hybrid_.cfg.max_z_step, hybrid_.cfg.max_z_velocity, dt) :
+          std::min(hybrid_.cfg.max_z_step, hybrid_.cfg.max_z_velocity * dt);
       bool accepted = false;
       for (int attempt = 0; attempt < 16; ++attempt) {
         candidate.setJointGroupPositions(joint_group_, desired);
@@ -701,7 +726,7 @@ class VerticalPressController {
     command_seed_->copyJointGroupPositions(joint_group_, desired);
     command_seed_->update();
     last_command_ = desired;
-    if ((white_pressed_ || drill_active_) &&
+    if ((white_pressed_ || (drill_active_ && drill_force_control_active_)) &&
         hybrid_.mode == rm75_touch_teleop::ControlMode::CONTACT_MODE) {
       hybrid_.commit(
           command_seed_->getGlobalLinkTransform(tip_link_).translation().z(), dt);
@@ -851,7 +876,7 @@ class VerticalPressController {
     publishActive(false);
     publishMode();
     if (drill_active_ || drill_holding_) publishDrillState("IDLE");
-    drill_active_ = drill_holding_ = false;
+    drill_active_ = drill_holding_ = drill_force_control_active_ = false;
     ROS_INFO_STREAM("Vertical-press control disengaged: " << reason);
   }
 
@@ -868,7 +893,7 @@ class VerticalPressController {
     message.data = reason;
     reason_pub_.publish(message);
     if (tool5_drill_enabled_) publishDrillState("SAFE_STOP");
-    drill_active_ = drill_holding_ = false;
+    drill_active_ = drill_holding_ = drill_force_control_active_ = false;
     ROS_ERROR_STREAM("RM75 VERTICAL PRESS SAFE_STOP: " << reason);
   }
 
@@ -930,7 +955,9 @@ class VerticalPressController {
   bool grey_pressed_ = false, white_pressed_ = false, active_ = false;
   bool released_since_stop_ = true, stop_latched_ = false;
   bool direct_descent_started_ = false;
-  bool tool5_drill_enabled_ = false, drill_active_ = false, drill_holding_ = false;
+  bool tool5_drill_enabled_ = false, tool5_require_force_feedback_ = false;
+  bool drill_active_ = false, drill_holding_ = false;
+  bool drill_force_control_active_ = false;
   int coordinate_ = -1, expected_coordinate_ = 1;
   double metres_per_touch_unit_ = 0.001, position_scale_ = 0.4;
   double publish_rate_ = 50.0, ik_timeout_ = 0.015, input_timeout_ = 0.25;

@@ -8,6 +8,7 @@
 #include <sstream>
 #include <unistd.h>
 #include "rm75_motion_planning/cartesian_path_generator.h"
+#include "rm75_motion_planning/cartesian_jog.h"
 #include "rm75_motion_planning/command_source_manager.h"
 #include "rm75_motion_planning/continuous_ik_solver.h"
 #include "rm75_motion_planning/moveit_collision_checker.h"
@@ -310,6 +311,44 @@ TEST(Collision, RequiredCheckerCannotBeSilentlyOmitted) {
       poses, joints, timed, dynamic, .002, .034906585, .35, true);
   EXPECT_FALSE(report.valid);
   EXPECT_FALSE(report.collision_checked);
+}
+
+TEST(CartesianJog, MapsAllTranslationDirectionsInBaseFrame) {
+  Pose start = Pose::Identity();
+  start.translation() = Eigen::Vector3d(.4, -.2, .6);
+  const std::vector<std::pair<std::string, Eigen::Vector3d>> cases{
+      {"x_plus", {1, 0, 0}}, {"x_minus", {-1, 0, 0}},
+      {"y_plus", {0, 1, 0}}, {"y_minus", {0, -1, 0}},
+      {"z_plus", {0, 0, 1}}, {"z_minus", {0, 0, -1}}};
+  for (const auto& item : cases) {
+    CartesianJogDirection direction;
+    ASSERT_TRUE(parseCartesianJogDirection(item.first, &direction));
+    const Pose target = cartesianJogTarget(start, direction, .01, .05);
+    EXPECT_TRUE(target.translation().isApprox(
+        start.translation() + .01 * item.second, 1e-12));
+    EXPECT_TRUE(target.rotation().isApprox(start.rotation(), 1e-12));
+  }
+}
+
+TEST(CartesianJog, MapsAllRotationsInLocalLink7Frame) {
+  Pose start = Pose::Identity();
+  start.linear() = Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitZ())
+                       .toRotationMatrix();
+  const std::vector<std::pair<std::string, Eigen::Vector3d>> cases{
+      {"rx_plus", {1, 0, 0}}, {"rx_minus", {-1, 0, 0}},
+      {"ry_plus", {0, 1, 0}}, {"ry_minus", {0, -1, 0}},
+      {"rz_plus", {0, 0, 1}}, {"rz_minus", {0, 0, -1}}};
+  for (const auto& item : cases) {
+    CartesianJogDirection direction;
+    ASSERT_TRUE(parseCartesianJogDirection(item.first, &direction));
+    const Pose target = cartesianJogTarget(start, direction, .01, .05);
+    const Eigen::Matrix3d expected = start.rotation() *
+        Eigen::AngleAxisd(.05, item.second).toRotationMatrix();
+    EXPECT_TRUE(target.rotation().isApprox(expected, 1e-12));
+    EXPECT_TRUE(target.translation().isApprox(start.translation(), 1e-12));
+  }
+  CartesianJogDirection ignored;
+  EXPECT_FALSE(parseCartesianJogDirection("/rm_driver/JointPos", &ignored));
 }
 
 TEST(RuntimeGuard, AllowsFreshSafeCurrentAndNextState) {

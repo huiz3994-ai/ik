@@ -63,6 +63,7 @@ force_motion_sign: 1.0
 # calculation uses actual base_link -> Link7 feedback while orientation is
 # locked; no unmeasured Tool5 tip offset is invented here.
 tool5_drill_enabled: false
+tool5_require_force_feedback: false
 tool5_drill_max_feed_travel: 0.05
 
 # Verified installation values copied from the existing sampling controller.

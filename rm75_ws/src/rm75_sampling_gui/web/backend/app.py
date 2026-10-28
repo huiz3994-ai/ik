@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import numpy as np
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from .services import WebRuntime
 from .session import SessionError
+from .limit_recovery import connection_target, run_limit_recovery
 
 
 LOG = logging.getLogger("rm75_sampling_gui.web.api")
@@ -62,6 +63,13 @@ class CartesianRequest(BaseModel):
     rz: float
     planner: str = "ompl"
     speed: int = 5
+
+
+class CartesianJogRequest(BaseModel):
+    direction: Literal[
+        "x_plus", "x_minus", "y_plus", "y_minus", "z_plus", "z_minus",
+        "rx_plus", "rx_minus", "ry_plus", "ry_minus", "rz_plus", "rz_minus",
+    ]
 
 
 async def _thread(callback: Any, *args: Any) -> Any:
@@ -196,6 +204,23 @@ def create_app(runtime: WebRuntime, frontend_dir: Optional[str] = None) -> FastA
         return await _thread(runtime.execute_cartesian,
                              _session(x_rm75_control_session), payload)
 
+    @app.get("/api/v1/cartesian/jog/status")
+    async def cartesian_jog_status() -> Dict[str, Any]:
+        return await _thread(runtime.cartesian_jog_status)
+
+    @app.post("/api/v1/cartesian/jog/start")
+    async def cartesian_jog_start(
+            request: CartesianJogRequest,
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        return await _thread(runtime.start_cartesian_jog,
+                             _session(x_rm75_control_session), request.direction)
+
+    @app.post("/api/v1/cartesian/jog/stop")
+    async def cartesian_jog_stop(
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        return await _thread(runtime.stop_cartesian_jog,
+                             _session(x_rm75_control_session))
+
     @app.get("/api/v1/poses")
     async def poses() -> Dict[str, Any]:
         return {"poses": await _thread(runtime.poses)}
@@ -274,6 +299,22 @@ def create_app(runtime: WebRuntime, frontend_dir: Optional[str] = None) -> FastA
                       x_rm75_control_session: Optional[str] = Header(default=None)) -> Any:
         return await _thread(runtime.command, name,
                              _session(x_rm75_control_session), request.payload)
+
+    @app.get("/api/v1/limit-recovery")
+    async def query_limit_recovery() -> Dict[str, Any]:
+        return await _thread(run_limit_recovery, False)
+
+    @app.get("/api/v1/limit-recovery/config")
+    async def limit_recovery_config() -> Dict[str, Any]:
+        return connection_target()
+
+    @app.post("/api/v1/limit-recovery")
+    async def recover_limit(
+            x_rm75_control_session: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+        runtime.require_session(_session(x_rm75_control_session))
+        if runtime.offline or runtime.simulation:
+            raise HTTPException(403, "OFFLINE/SIMULATION 模式禁止执行真实机械臂限位修复")
+        return await _thread(run_limit_recovery, True)
 
     @app.get("/api/v1/parameters")
     async def parameters() -> Dict[str, Any]:

@@ -4,7 +4,7 @@ project(rm75_motion_planning)
 add_compile_options(-std=c++14 -Wall -Wextra -Wpedantic)
 find_package(catkin REQUIRED COMPONENTS roscpp rm75_kinematics_optimization
   kdl_parser moveit_core moveit_ros_planning moveit_msgs geometry_msgs
-  shape_msgs srdfdom sensor_msgs std_msgs trajectory_msgs rm_msgs)
+  shape_msgs srdfdom sensor_msgs std_msgs std_srvs trajectory_msgs rm_msgs)
 find_package(Eigen3 REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(PythonInterp 3 REQUIRED)
@@ -14,7 +14,7 @@ catkin_package(
   LIBRARIES rm75_motion_planning
   CATKIN_DEPENDS roscpp rm75_kinematics_optimization kdl_parser moveit_core
     moveit_ros_planning moveit_msgs geometry_msgs shape_msgs srdfdom
-    sensor_msgs std_msgs trajectory_msgs rm_msgs
+    sensor_msgs std_msgs std_srvs trajectory_msgs rm_msgs
   DEPENDS EIGEN3 orocos_kdl)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS}
@@ -28,6 +28,7 @@ get_filename_component(RM75_KINEMATICS_SHARE
 set(RM75_6FB_URDF ${RM75_KINEMATICS_SHARE}/config/rm75_6fb.generated.urdf)
 
 add_library(rm75_motion_planning
+  src/cartesian_jog.cpp
   src/se3_interpolator.cpp
   src/cartesian_path_generator.cpp
   src/continuous_ik_solver.cpp
@@ -69,6 +70,13 @@ target_compile_definitions(rm75_cartesian_commissioning PRIVATE
 target_link_libraries(rm75_cartesian_commissioning rm75_motion_planning
   ${catkin_LIBRARIES})
 
+add_executable(rm75_cartesian_jog_server scripts/cartesian_jog_server.cpp)
+target_compile_definitions(rm75_cartesian_jog_server PRIVATE
+  RM75_DEFAULT_URDF="${RM75_6FB_URDF}"
+  RM75_DEFAULT_SRDF="${CMAKE_CURRENT_SOURCE_DIR}/../rm_robot/rm_moveit_config/rm_75_moveit_config/config/rm_75.srdf")
+target_link_libraries(rm75_cartesian_jog_server rm75_motion_planning
+  ${catkin_LIBRARIES})
+
 add_executable(rm75_gazebo_shadow_execution scripts/gazebo_shadow_execution.cpp)
 target_compile_definitions(rm75_gazebo_shadow_execution PRIVATE
   RM75_DEFAULT_URDF="${RM75_6FB_URDF}"
@@ -96,6 +104,7 @@ endif()
 install(TARGETS rm75_motion_planning rm75_motion_benchmark rm75_fallback_smoke
   rm75_live_state_audit rm75_low_speed_commissioning
   rm75_cartesian_commissioning
+  rm75_cartesian_jog_server
   rm75_gazebo_shadow_execution
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

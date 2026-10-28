@@ -36,6 +36,7 @@ class SystemLaunchManager:
         "/rm75_vertical_press",
         "/rm_control",
         "/rm75_low_speed_commissioning",
+        "/rm75_cartesian_jog",
     }
 
     def __init__(self, config: Dict[str, Any], execution_enabled: bool) -> None:
@@ -49,6 +50,9 @@ class SystemLaunchManager:
         )
         self._joint_control_execution_authorized = bool(
             config.get("joint_control_execution_authorized", False)
+        )
+        self._cartesian_jog_execution_authorized = bool(
+            config.get("cartesian_jog_execution_authorized", False)
         )
         self._touch_z_force_authorized = bool(
             config.get("touch_z_force_authorized", False)
@@ -81,6 +85,9 @@ class SystemLaunchManager:
         if (self._joint_control_execution_authorized
                 and definition.get("expected_nodes_joint_control")):
             key = "expected_nodes_joint_control"
+        elif (self._cartesian_jog_execution_authorized
+              and definition.get("expected_nodes_cartesian_jog")):
+            key = "expected_nodes_cartesian_jog"
         elif (self._touch_z_force_authorized
               and definition.get("expected_nodes_touch_control")):
             key = "expected_nodes_touch_control"
@@ -92,7 +99,7 @@ class SystemLaunchManager:
     def set_control_path(self, path: str) -> None:
         """Select the next mutually-exclusive base composition while stopped."""
 
-        if path not in {"observe", "joint_control", "z_force", "pose_pickup",
+        if path not in {"observe", "joint_control", "cartesian_jog", "z_force", "pose_pickup",
                         "qr_pickup", "tool5_drill"}:
             raise SystemLaunchError("不支持的控制路径：{}".format(path))
         with self._lock:
@@ -120,6 +127,7 @@ class SystemLaunchManager:
                 )
             )
         self._joint_control_execution_authorized = path == "joint_control"
+        self._cartesian_jog_execution_authorized = path == "cartesian_jog"
         self._touch_z_force_authorized = path == "z_force"
         self._tool5_drill_authorized = path == "tool5_drill"
         self._trajectory_execution_authorized = path in {"pose_pickup", "qr_pickup"}
@@ -145,6 +153,26 @@ class SystemLaunchManager:
                     "expected_nodes": expected,
                     "exit_code": None if process is None else process.poll(),
                 }
+
+            # ``qr`` and ``pose`` intentionally use alternative launch files
+            # that own the same /rm75_five_target_server node.  Node presence
+            # alone must not make the inactive alias look like an external
+            # subsystem; otherwise a web-owned QR launch is reported as an
+            # unowned ``pose`` process and every subsequent path switch is
+            # rejected.  An actually external node remains visible because no
+            # live web-owned launch claims it.
+            owned_nodes = {
+                node
+                for status in result.values()
+                if status["running"] and status["owned"]
+                for node in status["expected_nodes"]
+            }
+            for status in result.values():
+                expected = set(status["expected_nodes"])
+                if (status["running"] and not status["owned"] and expected
+                        and expected.issubset(owned_nodes)):
+                    status["running"] = False
+                    status["shadowed_by_owned_launch"] = True
         return result
 
     def start(self, name: str) -> Dict[str, Any]:
@@ -202,6 +230,18 @@ class SystemLaunchManager:
                 "${JOINT_CONTROL_EXECUTION_AUTHORIZED}",
                 "true" if self._joint_control_execution_authorized else "false",
             )
+            rendered = rendered.replace(
+                "${CARTESIAN_JOG_EXECUTION_AUTHORIZED}",
+                "true" if self._cartesian_jog_execution_authorized else "false",
+            )
+            jog = dict(self._config.get("cartesian_jog", {}))
+            for token, option, fallback in (
+                    ("${CARTESIAN_JOG_LINK7_SPEED_MPS}", "link7_speed_mps", 0.01),
+                    ("${CARTESIAN_JOG_ANGULAR_SPEED_RAD_S}", "angular_speed_rad_s", 0.0872664626),
+                    ("${CARTESIAN_JOG_MAX_TRANSLATION_M}", "max_translation_m", 0.01),
+                    ("${CARTESIAN_JOG_MAX_ROTATION_RAD}", "max_rotation_rad", 0.0872664626),
+                    ("${CARTESIAN_JOG_HEARTBEAT_TIMEOUT_S}", "heartbeat_timeout_sec", 0.35)):
+                rendered = rendered.replace(token, str(jog.get(option, fallback)))
             rendered = rendered.replace(
                 "${TOUCH_Z_FORCE_AUTHORIZED}",
                 "true" if self._touch_z_force_authorized else "false",

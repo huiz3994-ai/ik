@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, Camera, ChevronRight, CircleGauge, FileSliders, FlaskConical, Gamepad2, Menu, OctagonX, PackageCheck, Power, QrCode, Radio, RefreshCw, Save, Server, ShieldCheck, Siren, Unplug, Waves } from 'lucide-react'
+import { Activity, Bot, Camera, ChevronRight, CircleGauge, FileSliders, FlaskConical, Gamepad2, Menu, Move3D, OctagonX, PackageCheck, Power, QrCode, Radio, RefreshCw, RotateCw, Save, Server, ShieldCheck, Siren, Unplug, Waves } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { JointPanel, Metric, Panel, RobotTwin, StateBadge, StatusPill } from './components'
 import { api, command, useStation } from './store'
 import type { Dict, RobotDescriptor, StationState, ToolPickConfig } from './types'
 
 const nav = [
-  ['dashboard','操作台',CircleGauge],['robot','机器人状态',Bot],['force','实时力监控',Waves],
+  ['dashboard','操作台',CircleGauge],['robot','机器人状态',Bot],['cartesian','末端位置控制',Move3D],['force','实时力监控',Waves],
   ['qr','二维码取物',QrCode],['tools','自主写点取物',PackageCheck],['robotctl','机器人控制',Gamepad2],['sampling','采样设备',FlaskConical],['diagnostics','故障诊断',Siren],['parameters','系统参数',FileSliders]
 ] as const
 
 function useConnection() {
-  const {sessionId,setSessionReady,setState,setConnected,setModel,setError}=useStation()
+  const {sessionId,setSession,setSessionReady,setState,setConnected,setModel,setError}=useStation()
   const retry=useRef(0)
   useEffect(()=>{ api<RobotDescriptor>('/api/v1/model').then(setModel).catch(e=>setError(String(e))) },[setModel,setError])
   useEffect(()=>{
@@ -21,18 +21,19 @@ function useConnection() {
       socket=new WebSocket(`${scheme}://${location.host}/api/v1/ws`)
       socket.onopen=()=>{retry.current=0;setConnected(true); if(sessionId) socket?.send(JSON.stringify({type:'heartbeat',session_id:sessionId}))}
       socket.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='state')setState(m.data);if(m.type==='heartbeat_ack')setSessionReady(true);if(m.type==='error')setError(m.message)}
-      socket.onclose=()=>{setConnected(false);setSessionReady(false);if(!stopped){const delay=Math.min(5000,500*2**retry.current++);reconnect=window.setTimeout(connect,delay)}}
+      socket.onclose=()=>{setConnected(false);setSessionReady(false);if(sessionId)setSession(null);if(!stopped){const delay=Math.min(5000,500*2**retry.current++);reconnect=window.setTimeout(connect,delay)}}
       socket.onerror=()=>socket?.close()
       heartbeat=window.setInterval(()=>{if(socket?.readyState===WebSocket.OPEN){socket.send(JSON.stringify(sessionId?{type:'heartbeat',session_id:sessionId}:{type:'ping'}))}},200)
     }
     connect(); return()=>{stopped=true;if(heartbeat)clearInterval(heartbeat);if(reconnect)clearTimeout(reconnect);socket?.close()}
-  },[sessionId,setConnected,setError,setSessionReady,setState])
+  },[sessionId,setConnected,setError,setSession,setSessionReady,setState])
 }
 
 function Dashboard({state}:{state:StationState}) {
+  const {sessionReady}=useStation()
   const run=async(name:string,action:string)=>api(`/api/v1/system/${name}/${action}`,{method:'POST'})
   const systems=[['base','RM75 基础栈','驱动 · MoveIt · TF'],['camera','D435i RGB','424×240 · 6 Hz'],['qr','Mark / QR','定位与任务服务']]
-  const pathLabels:Record<string,string>={observe:'安全观察',joint_control:'七轴关节控制',z_force:'Z 力位 / Touch',pose_pickup:'写点取物 / 轨迹桥',qr_pickup:'QR / 轨迹桥',tool5_drill:'Tool5 钻取'}
+  const pathLabels:Record<string,string>={observe:'安全观察',joint_control:'七轴关节控制',cartesian_jog:'末端笛卡尔点动',z_force:'Z 力位 / Touch',pose_pickup:'写点取物 / 轨迹桥',qr_pickup:'QR / 轨迹桥',tool5_drill:'Tool5 钻取'}
   return <div className="page-grid dashboard-grid">
     <Panel title="系统态势" eyebrow="SYSTEM OVERVIEW" className="span-2"><div className="status-grid">
       <StatusPill label="ROS Master" ok={!!state.health.master}/><StatusPill label="RM75 控制器" ok={!!state.health.driver&&!!state.fresh.joints} detail="驱动节点在线且收到新鲜控制器反馈才视为已连接"/>
@@ -40,8 +41,8 @@ function Dashboard({state}:{state:StationState}) {
       <StatusPill label="D435i" ok={!!state.health.camera||!!state.fresh.image}/><StatusPill label="Geomagic Touch" ok={!!state.health.touch}/>
       <StatusPill label="六维力" ok={!!state.fresh.wrench}/><StatusPill label="Mark识别" ok={!!state.health.marker}/>
     </div></Panel>
-    <Panel title="安全与控制" eyebrow="SAFETY"><div className="safety-hero"><StateBadge state={state.operator_state}/><Metric label="功能权限" value={state.execution.unified_control?'全部控制已启用':'受限'}/><Metric label="当前控制链路" value={pathLabels[state.active_control_path||'observe']}/><Metric label="运行控制源" value={state.control_launch_mode||state.control_mode||'IDLE'}/><Metric label="当前工具" value={state.selected_tool||'未选择'}/><Metric label="工具电压" value={state.tool_voltage??'—'} unit="V"/></div><p className="lock-note"><ShieldCheck size={16}/>无需选择授权路径；点击功能时自动切换对应的唯一控制链路，并继续执行命令源互斥、控制租约、心跳和故障停止检查。</p><div className="button-row power-buttons"><button onClick={()=>command('set_voltage',{voltage:24})}>工具 24V</button><button onClick={()=>command('set_voltage',{voltage:0})}>工具 0V</button></div></Panel>
-    <Panel title="生命周期" eyebrow="SUPERVISED LAUNCH" className="span-2"><div className="lifecycle-list">{systems.map(([key,name,detail])=>{const s=state.subsystems[key];return <div className="lifecycle" key={key}><div className={`node-icon ${s?.running?'on':''}`}><Server size={19}/></div><div><b>{name}</b><span>{detail}</span></div><div className="lifecycle-state">{s?.running?'运行中':'已停止'}{s?.owned&&<small>本平台管理</small>}</div><button onClick={()=>run(key,s?.running?'stop':'start')}>{s?.running?'停止':'启动'}</button></div>})}</div></Panel>
+    <Panel title="安全与控制" eyebrow="SAFETY"><div className="safety-hero"><StateBadge state={state.operator_state}/><Metric label="功能权限" value={state.execution.unified_control?'全部控制已启用':'受限'}/><Metric label="当前控制链路" value={pathLabels[state.active_control_path||'observe']}/><Metric label="运行控制源" value={state.control_launch_mode||state.control_mode||'IDLE'}/><Metric label="当前工具" value={state.selected_tool||'未选择'}/><Metric label="工具电压" value={state.tool_voltage??'—'} unit="V"/></div><p className="lock-note"><ShieldCheck size={16}/>无需选择授权路径；点击功能时自动切换对应的唯一控制链路，并继续执行命令源互斥、控制租约、心跳和故障停止检查。</p><div className="button-row power-buttons"><button disabled={!sessionReady} onClick={()=>command('set_voltage',{voltage:24})}>工具 24V</button><button disabled={!sessionReady} onClick={()=>command('set_voltage',{voltage:0})}>工具 0V</button></div></Panel>
+    <Panel title="生命周期" eyebrow="SUPERVISED LAUNCH" className="span-2"><div className="lifecycle-list">{systems.map(([key,name,detail])=>{const s=state.subsystems[key];return <div className="lifecycle" key={key}><div className={`node-icon ${s?.running?'on':''}`}><Server size={19}/></div><div><b>{name}</b><span>{detail}</span></div><div className="lifecycle-state">{s?.running?'运行中':'已停止'}{s?.owned&&<small>本平台管理</small>}</div><button disabled={!sessionReady} onClick={()=>run(key,s?.running?'stop':'start')}>{s?.running?'停止':'启动'}</button></div>})}</div></Panel>
     <Panel title="最近系统事件" eyebrow="EVENT STREAM"><EventList state={state}/></Panel>
   </div>
 }
@@ -51,7 +52,7 @@ function RobotPage({state,model}:{state:StationState;model:RobotDescriptor}) {
   const [mode,setMode]=useState<'joint'|'cart'>('joint')
   const actual=Array.from({length:7},(_,i)=>state.joints?.[`joint${i+1}`]||0)
   const exec=()=>api('/api/v1/joints/execute',{method:'POST',body:JSON.stringify({target})})
-  return <div className="robot-layout"><div className="robot-stage"><RobotTwin descriptor={model} actual={actual} target={target} actualFresh={!!state.fresh.joints}/><div className="model-proof"><b>{model.model}</b><span>{model.link7_variant} · J7 Z 0.1612 m</span><small>厂商 xacro / STL 实时装载</small></div></div><aside><div className="aside-title"><div><span>{mode==='joint'?'JOINT CONTROL':'CARTESIAN CONTROL'}</span><h2>{mode==='joint'?'七轴离线目标':'末端位姿目标'}</h2></div><StateBadge state={state.operator_state}/></div><div className="control-tabs"><button className={mode==='joint'?'active':''} onClick={()=>setMode('joint')}>关节角</button><button className={mode==='cart'?'active':''} onClick={()=>setMode('cart')}>笛卡尔位姿</button></div><div className="planner-row"><select value={planner} onChange={e=>setPlanner(e.target.value as any)}><option value="ompl">自由规划 OMPL</option><option value="lin">直线规划 LIN</option><option value="ptp">关节规划 PTP</option><option value="direct">直接关节插补</option></select><select value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[5,20,30,50,100].map(v=><option key={v} value={v}>速度 {v}%</option>)}</select></div>{mode==='joint'?<JointPanel state={state} model={model} target={target} onTarget={setTarget} onExecute={()=>sessionReady?exec():Promise.reject(new Error('请先取得控制权并等待心跳就绪'))} onCancel={()=>command('cancel_joints')}/>:<CartesianControl state={state}/>}</aside></div>
+  return <div className="robot-layout"><div className="robot-stage"><RobotTwin descriptor={model} actual={actual} target={target} actualFresh={!!state.fresh.joints}/><div className="model-proof"><b>{model.model}</b><span>{model.link7_variant} · J7 Z 0.1612 m</span><small>厂商 xacro / STL 实时装载</small></div></div><aside><div className="aside-title"><div><span>{mode==='joint'?'JOINT CONTROL':'CARTESIAN CONTROL'}</span><h2>{mode==='joint'?'七轴离线目标':'末端位姿目标'}</h2></div><StateBadge state={state.operator_state}/></div><div className="control-tabs"><button className={mode==='joint'?'active':''} onClick={()=>setMode('joint')}>关节角</button><button className={mode==='cart'?'active':''} onClick={()=>setMode('cart')}>笛卡尔位姿</button></div><div className="planner-row"><select value={planner} onChange={e=>setPlanner(e.target.value as any)}><option value="ompl">自由规划 OMPL</option><option value="lin">直线规划 LIN</option><option value="ptp">关节规划 PTP</option><option value="direct">直接关节插补</option></select><select value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[5,20,30,50,100].map(v=><option key={v} value={v}>速度 {v}%</option>)}</select></div>{mode==='joint'?<JointPanel state={state} model={model} target={target} controlsReady={sessionReady} onTarget={setTarget} onExecute={exec} onCancel={()=>command('cancel_joints')}/>:<CartesianControl state={state}/>}</aside></div>
 }
 
 type CartesianPose={name?:string;x:number;y:number;z:number;rx:number;ry:number;rz:number}
@@ -68,6 +69,72 @@ function CartesianControl({state}:{state:StationState}) {
   return <div className="cartesian-control"><p className="muted">Link7 在 base_link 下的位姿；位置为 m，姿态为 rad。预览只计算 IK，不运动。</p><div className="preset-list">{presets.map((item,i)=><button key={i} onClick={()=>{setPose(item);void preview(item)}}>{item.name||`姿态 ${i+1}`}</button>)}</div><div className="cartesian-grid">{(['x','y','z','rx','ry','rz'] as const).map(key=><label key={key}><span>{key.toUpperCase()}</span><input type="number" step={key.startsWith('r')?0.01:0.001} value={pose[key]} onChange={e=>update(key,Number(e.target.value))}/></label>)}</div><div className="joint-actions"><button onClick={sync}>同步实际位姿</button><button disabled={busy} onClick={()=>preview()}>IK 预览</button><button className="primary" disabled={busy||!sessionReady} onClick={execute}>执行末端目标</button></div>{notice&&<p className="tool-notice">{notice}</p>}</div>
 }
 
+type JogDirection='x_plus'|'x_minus'|'y_plus'|'y_minus'|'z_plus'|'z_minus'|'rx_plus'|'rx_minus'|'ry_plus'|'ry_minus'|'rz_plus'|'rz_minus'
+const translationButtons:{direction:JogDirection;label:string;cell:string}[]=[
+  {direction:'z_plus',label:'Z+',cell:'tl'},{direction:'x_plus',label:'X+',cell:'tc'},
+  {direction:'z_minus',label:'Z−',cell:'tr'},{direction:'y_minus',label:'Y−',cell:'ml'},
+  {direction:'y_plus',label:'Y+',cell:'mr'},{direction:'x_minus',label:'X−',cell:'bc'},
+]
+const rotationButtons:{direction:JogDirection;label:string;cell:string}[]=[
+  {direction:'rx_minus',label:'X−',cell:'tl'},{direction:'ry_plus',label:'Y+',cell:'tc'},
+  {direction:'rx_plus',label:'X+',cell:'tr'},{direction:'rz_minus',label:'Z−',cell:'ml'},
+  {direction:'rz_plus',label:'Z+',cell:'mr'},{direction:'ry_minus',label:'Y−',cell:'bc'},
+]
+
+function CartesianJogPage({state}:{state:StationState}) {
+  const {sessionReady,sessionId,connected,setError}=useStation()
+  const jog=state.cartesian_jog
+  const held=useRef<JogDirection|null>(null), request=useRef(0), stopping=useRef(false)
+  const [localDirection,setLocalDirection]=useState<JogDirection|null>(null)
+  const motionReady=sessionReady&&connected&&state.operator_state!=='SAFE_STOP'
+  const sendStop=useCallback(async()=>{
+    held.current=null;setLocalDirection(null)
+    if(stopping.current)return
+    stopping.current=true
+    try{await api('/api/v1/cartesian/jog/stop',{method:'POST'})}
+    catch(error){if(sessionId)setError(error instanceof Error?error.message:String(error))}
+    finally{stopping.current=false}
+  },[sessionId,setError])
+  const start=useCallback(async(direction:JogDirection)=>{
+    if(!motionReady||held.current)return
+    held.current=direction;setLocalDirection(direction)
+    const generation=++request.current
+    try{
+      await api('/api/v1/cartesian/jog/start',{method:'POST',body:JSON.stringify({direction})})
+      if(held.current!==direction||generation!==request.current)await sendStop()
+    }catch(error){held.current=null;setLocalDirection(null);setError(error instanceof Error?error.message:String(error))}
+  },[motionReady,sendStop,setError])
+  useEffect(()=>{
+    const stop=()=>{if(held.current)void sendStop()}
+    const hidden=()=>{if(document.visibilityState!=='visible')stop()}
+    const unload=()=>{if(!held.current||!sessionId)return;fetch('/api/v1/cartesian/jog/stop',{method:'POST',keepalive:true,headers:{'X-RM75-Control-Session':sessionId}}).catch(()=>{})}
+    window.addEventListener('blur',stop);window.addEventListener('pagehide',unload)
+    document.addEventListener('visibilitychange',hidden)
+    return()=>{window.removeEventListener('blur',stop);window.removeEventListener('pagehide',unload);document.removeEventListener('visibilitychange',hidden);unload()}
+  },[sendStop,sessionId])
+  useEffect(()=>{if((!sessionReady||!connected)&&held.current){held.current=null;setLocalDirection(null)}},[sessionReady,connected])
+  const handlers=(direction:JogDirection)=>({
+    onPointerDown:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);void start(direction)},
+    onPointerUp:(event:React.PointerEvent<HTMLButtonElement>)=>{event.preventDefault();void sendStop()},
+    onPointerCancel:()=>void sendStop(),onLostPointerCapture:()=>{if(held.current)void sendStop()},
+    onKeyDown:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if((event.key===' '||event.key==='Enter')&&!event.repeat){event.preventDefault();void start(direction)}},
+    onKeyUp:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();void sendStop()}},
+  })
+  const renderPad=(items:typeof translationButtons,rotation=false)=><div className="jog-pad">
+    <div className="jog-center"><b>{rotation?'Link7':'base_link'}</b><span>{rotation?'局部旋转':'直线平移'}</span></div>
+    {items.map(item=><button key={item.direction} className={`jog-button ${item.cell} ${rotation?'rotation':''} ${item.direction.endsWith('minus')?'negative':''} ${(localDirection||jog?.direction)===item.direction?'active':''}`} disabled={!motionReady||(!!localDirection&&localDirection!==item.direction)||jog?.state==='STOPPING'} aria-label={`${rotation?'绕局部轴旋转':'沿基坐标轴平移'} ${item.label}`} {...handlers(item.direction)}>{rotation&&<RotateCw size={20}/>}<strong>{item.label}</strong></button>)}
+  </div>
+  const pose=state.tcp||{},target=jog?.target_pose||{}
+  const mm=(value:unknown)=>Number.isFinite(Number(value))?(Number(value)*1000).toFixed(2):'—'
+  const deg=(value:unknown)=>Number.isFinite(Number(value))?(Number(value)*180/Math.PI).toFixed(2):'—'
+  return <div className="page-grid cartesian-jog-page">
+    <Panel title="位置控制" eyebrow="BASE_LINK · HOLD TO JOG">{renderPad(translationButtons)}<p className="lock-note"><Move3D size={16}/>X/Y/Z 均沿 <b>base_link</b> 坐标轴直线平移。</p></Panel>
+    <Panel title="姿态控制" eyebrow="LINK7 LOCAL AXES · HOLD TO JOG">{renderPad(rotationButtons,true)}<p className="lock-note"><RotateCw size={16}/>X/Y/Z 表示绕 <b>Link7 局部轴</b>旋转，不是平移。</p></Panel>
+    <Panel title="Link7 实际位姿" eyebrow="NOT A CALIBRATED TOOL TCP" className="span-2"><div className="jog-pose-grid">{(['x','y','z'] as const).map(key=><Metric key={key} label={key.toUpperCase()} value={mm(pose[key])} unit="mm"/>)}{(['rx','ry','rz'] as const).map(key=><Metric key={key} label={key.toUpperCase()} value={deg(pose[key])} unit="°"/>)}</div><p className="safety-note"><ShieldCheck size={16}/>末端参考是厂商模型的 <b>Link7</b>；当前没有经过确认的工具 TCP 标定。</p></Panel>
+    <Panel title="点动执行状态" eyebrow="GUARDED CARTESIAN EXECUTOR"><div className="jog-status"><Metric label="控制模式" value={jog?.state||'IDLE'} accent={jog?.state==='JOGGING'}/><Metric label="当前方向" value={jog?.direction||'—'}/><Metric label="进度" value={Math.round((jog?.progress||0)*100)} unit="%"/><Metric label="停止原因" value={jog?.stop_reason||'—'}/></div><div className="jog-target"><b>本次目标位姿</b><span>XYZ {mm(target.x)} / {mm(target.y)} / {mm(target.z)} mm</span><span>RPY {deg(target.rx)} / {deg(target.ry)} / {deg(target.rz)} °</span></div><p className="lock-note">后端硬限制：单次平移 ≤ {(jog?.limits?.translation_m||.01)*1000} mm，单次旋转 ≤ {((jog?.limits?.rotation_rad||Math.PI/36)*180/Math.PI).toFixed(1)}°。达到上限后必须先松开。</p></Panel>
+  </div>
+}
+
 function RobotControlPage({state}:{state:StationState}) {
   const {sessionReady,planner,speed,setPlanner,setSpeed}=useStation()
   const [presets,setPresets]=useState<CartesianPose[]>([]),[history,setHistory]=useState<{t:number;fz:number}[]>([]),[busy,setBusy]=useState('')
@@ -79,12 +146,14 @@ function RobotControlPage({state}:{state:StationState}) {
 }
 
 function ForcePage({state}:{state:StationState}) {
+  const {sessionReady}=useStation()
   const [paused,setPaused]=useState(false), [samples,setSamples]=useState<Record<string,number>[]>([])
   useEffect(()=>{if(paused)return;const w=state.wrench||{};setSamples(v=>[...v.slice(-299),{t:Date.now(),Fx:w.Fx||0,Fy:w.Fy||0,Fz:w.Fz||0,setpoint:state.force_setpoint||0}])},[state.sequence,paused,state.force_setpoint,state.wrench])
   const w=state.wrench||{}, actual=state.filtered_force_z??state.force_z??w.Fz
-  const zForceActive=state.control_launch_mode==='z_force_teleop'
-  const hc=state.haptic_command, hapticNorm=hc?Math.hypot(hc.x,hc.y,hc.z):0
-  return <div className="page-grid force-grid"><Panel title="六维力实时值" eyebrow="WRENCH · SENSOR FRAME" className="span-2"><div className="force-metrics">{['Fx','Fy','Fz','Tx','Ty','Tz'].map(k=><Metric key={k} label={k.replace('T','M')} value={Number.isFinite(w[k])?w[k].toFixed(3):'—'} unit={k.startsWith('T')?'N·m':'N'} accent={k==='Fz'}/>)}</div></Panel><Panel title="力控闭环" eyebrow="Z-ONLY HYBRID + HAPTIC"><div className="force-loop"><Metric label="目标下压力" value={state.force_setpoint?.toFixed(2)||'—'} unit="N"/><ChevronRight/><Metric label="实际下压力" value={Number.isFinite(actual)?Number(actual).toFixed(2):'—'} unit="N" accent/><ChevronRight/><Metric label="力误差" value={Number.isFinite(actual)&&Number.isFinite(state.force_setpoint)?(Number(state.force_setpoint)-Number(actual)).toFixed(2):'—'} unit="N"/></div><dl><dt>运动自由度</dt><dd>仅 Z；X/Y/姿态锁定</dd><dt>Touch力反馈</dt><dd>{zForceActive?(state.haptic_enabled?(state.haptic_force_fresh?`已开启 · ${hapticNorm.toFixed(3)} N`:'已开启 · 等待新鲜力'):'启动中'):'未开启'}</dd><dt>控制模式</dt><dd>{state.control_mode||'—'}</dd><dt>停止原因</dt><dd>{state.stop_reason||'无'}</dd><dt>反馈新鲜度</dt><dd>{state.fresh.wrench?`${((state.ages.wrench||0)*1000).toFixed(0)} ms`:'过期 / 不可用'}</dd></dl><div className="button-grid"><button className={zForceActive?'secondary':'primary'} onClick={()=>command(zForceActive?'stop_z_force_teleop':'start_z_force_teleop')}>{zForceActive?'停止 Z 力位遥操作':'启动 Z 力位 + 力反馈'}</button><button onClick={()=>command(state.control_launch_mode==='force_control'?'stop_sampling':'enter_force_control')}>{state.control_launch_mode==='force_control'?'停止独立力控':'独立垂直下压力控'}</button></div><p className="safety-note"><ShieldCheck size={16}/>灰键只控制 Z；接触后 Z 由力闭环接管。停止前先松开灰键，紧急情况使用顶部软件急停。</p></Panel><Panel title="Fz 滚动曲线" eyebrow="300 SAMPLES" className="span-2 chart-panel"><button className="chart-pause" onClick={()=>setPaused(!paused)}>{paused?'继续显示':'暂停显示'}</button><ResponsiveContainer width="100%" height={360}><LineChart data={samples}><CartesianGrid stroke="#17303d"/><XAxis dataKey="t" tickFormatter={v=>new Date(v).toLocaleTimeString()} stroke="#6c8694"/><YAxis unit=" N" stroke="#6c8694"/><Tooltip labelFormatter={v=>new Date(Number(v)).toLocaleTimeString()}/><Legend/><Line dataKey="Fz" stroke="#26d8cc" dot={false} isAnimationActive={false}/><Line dataKey="setpoint" stroke="#f3a451" dot={false} strokeDasharray="5 5" isAnimationActive={false}/></LineChart></ResponsiveContainer></Panel></div>
+  const teleopActive=state.control_launch_mode==='teleop'
+  const forceControlActive=state.control_launch_mode==='force_control'
+  const anotherControlActive=!!state.control_launch_mode&&!teleopActive
+  return <div className="page-grid force-grid"><Panel title="六维力实时值" eyebrow="WRENCH · SENSOR FRAME" className="span-2"><div className="force-metrics">{['Fx','Fy','Fz','Tx','Ty','Tz'].map(k=><Metric key={k} label={k.replace('T','M')} value={Number.isFinite(w[k])?w[k].toFixed(3):'—'} unit={k.startsWith('T')?'N·m':'N'} accent={k==='Fz'}/>)}</div></Panel><Panel title="Touch 普通遥操作" eyebrow="EXISTING RM75 TELEOP"><div className="force-loop"><Metric label="遥操作状态" value={teleopActive?'运行中':'已停止'} accent={teleopActive}/><ChevronRight/><Metric label="Touch" value={state.health.touch?'在线':'离线'}/><ChevronRight/><Metric label="实际 Fz" value={Number.isFinite(actual)?Number(actual).toFixed(2):'—'} unit="N"/></div><dl><dt>运动自由度</dt><dd>X/Y/Z 平移 + 姿态</dd><dt>控制方式</dt><dd>普通位置遥操作</dd><dt>控制模式</dt><dd>{state.control_mode||'—'}</dd><dt>停止原因</dt><dd>{state.stop_reason||'无'}</dd><dt>力反馈新鲜度</dt><dd>{state.fresh.wrench?`${((state.ages.wrench||0)*1000).toFixed(0)} ms`:'过期 / 不可用'}</dd></dl><div className="button-grid"><button disabled={!sessionReady||anotherControlActive} className={teleopActive?'secondary':'primary'} onClick={()=>command(teleopActive?'stop_teleop':'start_teleop')}>{teleopActive?'停止普通遥操作':'启动普通遥操作'}</button><button disabled={!sessionReady||(!!state.control_launch_mode&&!forceControlActive)} onClick={()=>command(forceControlActive?'stop_sampling':'enter_force_control')}>{forceControlActive?'停止独立力控':'独立垂直下压力控'}</button></div><p className="safety-note"><ShieldCheck size={16}/>灰键控制平移，白键控制姿态；普通遥操作不启用 Z 力位闭环或 Touch 力反馈，六维力仅用于安全保护。紧急情况使用顶部软件急停。</p></Panel><Panel title="Fz 滚动曲线" eyebrow="300 SAMPLES" className="span-2 chart-panel"><button className="chart-pause" onClick={()=>setPaused(!paused)}>{paused?'继续显示':'暂停显示'}</button><ResponsiveContainer width="100%" height={360}><LineChart data={samples}><CartesianGrid stroke="#17303d"/><XAxis dataKey="t" tickFormatter={v=>new Date(v).toLocaleTimeString()} stroke="#6c8694"/><YAxis unit=" N" stroke="#6c8694"/><Tooltip labelFormatter={v=>new Date(Number(v)).toLocaleTimeString()}/><Legend/><Line dataKey="Fz" stroke="#26d8cc" dot={false} isAnimationActive={false}/><Line dataKey="setpoint" stroke="#f3a451" dot={false} strokeDasharray="5 5" isAnimationActive={false}/></LineChart></ResponsiveContainer></Panel></div>
 }
 
 function VisionPage({state}:{state:StationState}) {
@@ -139,8 +208,8 @@ function ToolsPage({state}:{state:StationState}) {
   </div>
 }
 
-function ConfirmDialog({title,detail,onCancel,onConfirm}:{title:string;detail:string;onCancel:()=>void;onConfirm:()=>void}) {
-  return <div className="confirm-backdrop" role="presentation"><section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><span>SAFETY CONFIRMATION</span><h2 id="confirm-title">{title}</h2><pre>{detail}</pre><p><ShieldCheck size={16}/>该确认层不会阻塞控制心跳；确认前不会发送执行命令。</p><div><button onClick={onCancel}>取消，仅保留 Dry Run</button><button className="primary" onClick={onConfirm}>确认执行</button></div></section></div>
+function ConfirmDialog({title,detail,onCancel,onConfirm,cancelLabel='取消，仅保留 Dry Run',confirmLabel='确认执行'}:{title:string;detail:string;onCancel:()=>void;onConfirm:()=>void;cancelLabel?:string;confirmLabel?:string}) {
+  return <div className="confirm-backdrop" role="presentation"><section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><span>SAFETY CONFIRMATION</span><h2 id="confirm-title">{title}</h2><pre>{detail}</pre><p><ShieldCheck size={16}/>该确认层不会阻塞控制心跳；确认前不会发送执行命令。</p><div><button onClick={onCancel}>{cancelLabel}</button><button className="primary" onClick={onConfirm}>{confirmLabel}</button></div></section></div>
 }
 
 function SamplingPage({state}:{state:StationState}) {
@@ -150,13 +219,12 @@ function SamplingPage({state}:{state:StationState}) {
   const motor=hw?.motor
   const [speed,setSpeed]=useState(0.5)
   const [duration,setDuration]=useState(3)
-  const [drillDepthCm,setDrillDepthCm]=useState(3)
   const motorRun=(action:string)=>command('motor',{action,speed,duration})
   const number=(value:number|null|undefined,digits=2)=>Number.isFinite(value)?Number(value).toFixed(digits):'—'
   const controlsReady=sessionReady&&(hw?.authorized||state.simulation)
   const motionReady=controlsReady&&state.operator_state!=='SAFE_STOP'
   const drill=state.tool5_drill
-  const drillActive=['STARTING','DRILLING','DEPTH_REACHED','STOPPING_MOTOR'].includes(drill?.state||'')
+  const drillActive=['STARTING','ROTATING','DRILLING','DEPTH_REACHED','STOPPING_MOTOR'].includes(drill?.state||'')
   const deviceHealth=sensors?.health||{}
   const busHealthy=Object.keys(deviceHealth).length===0||Object.values(deviceHealth).every(value=>value==='ok')
   return <div className="page-grid sampling-grid">
@@ -186,13 +254,12 @@ function SamplingPage({state}:{state:StationState}) {
       <div className="motor-buttons"><button disabled={!motionReady||motor?.busy} onClick={()=>motorRun('forward')}>正转</button><button disabled={!motionReady||motor?.busy} onClick={()=>motorRun('reverse')}>反转</button><button className="primary" disabled={!motionReady||motor?.busy} onClick={()=>motorRun('dig')}>采样钻进</button><button className="danger-button" disabled={!controlsReady} onClick={()=>motorRun('stop')}>停止并失能</button><button disabled={!controlsReady||motor?.busy} onClick={()=>motorRun('status')}>读取状态</button></div>
       <p className="lock-note"><ShieldCheck size={16}/>普通动作单次最长 60 s；Tool5 “开始取土”无固定时长，持续到点击“停止旋转”或安全保护触发。VEL 模式及硬上限由底层自动应用。</p>
     </Panel>
-    <Panel title="Tool5 力控螺旋钻取土" eyebrow="CONTACTED SOIL · RELATIVE Z" className="span-3">
+    <Panel title="Tool5 螺旋电机连续旋转" eyebrow="MOTOR ONLY · INDEPENDENT Z FORCE" className="span-3">
       <div className="drill-layout"><div>
-        <label className="hardware-field"><span>Z 轴下降距离</span><input type="number" min="0.1" max="5" step="0.1" value={drillDepthCm} onChange={e=>setDrillDepthCm(Math.min(5,Math.max(.1,Number(e.target.value)||.1)))}/><b>cm</b></label>
-        <div className="motor-buttons"><button className="primary" disabled={!motionReady||drillActive||drill?.state==='COMPLETED'} onClick={()=>command('start_tool5_drill',{depth_cm:drillDepthCm})}>开始取土</button><button className="danger-button" disabled={!controlsReady||!drillActive} onClick={()=>command('stop_tool5_rotation')}>停止旋转</button></div>
-        <p className="lock-note"><ShieldCheck size={16}/>启动前钻头必须已由人工接触土壤；不执行找面。到深度只停止 Z 进给并保持，绝不自动回撤。</p>
+        <div className="motor-buttons"><button className="primary" disabled={!motionReady||drillActive} onClick={()=>command('start_tool5_rotation')}>开始连续旋转</button><button className="danger-button" disabled={!controlsReady||!drillActive} onClick={()=>command('stop_tool5_rotation')}>停止旋转</button></div>
+        <p className="lock-note"><ShieldCheck size={16}/>这里仅控制螺旋电机，不会命令机械臂下降。电机旋转期间可进入“实时力监控”，启动“独立垂直下压力控”；急停仍会同时停止电机和机械臂。</p>
       </div><div className="drill-status-grid">
-        <Metric label="任务状态" value={drill?.state||'IDLE'} accent={drill?.state==='DEPTH_REACHED'}/><Metric label="实际下降" value={number((drill?.actual_depth_m||0)*100,2)} unit="cm"/><Metric label="轴向力 Fz" value={number(drill?.axial_force_n,2)} unit="N"/><Metric label="力矩合量" value={number(drill?.torque_norm_nm,3)} unit="N·m"/><Metric label="电机" value={drill?.motor_running?'旋转中':'已停止'}/><Metric label="Z 进给" value={drill?.feed_state||'IDLE'}/>
+        <Metric label="旋转状态" value={drill?.state||'IDLE'} accent={drill?.state==='ROTATING'}/><Metric label="电机" value={drill?.motor_running?'旋转中':'已停止'}/><Metric label="机械臂 Z" value="由实时力监控独立控制"/><Metric label="轴向力 Fz" value={number(state.filtered_force_z??state.force_z??state.wrench?.Fz,2)} unit="N"/>
       </div></div>
       <div className={`tool-notice ${drill?.state==='SAFE_STOP'?'critical':''}`}>{drill?.fault_reason||`正常连接时电机持续旋转，低速/堵转不会因土壤阻力自动停机；点击“停止旋转”才停止。${number(drill?.motor_watchdog_timeout_s,1)} s 通信看门狗、超速和硬限仍保留。`}</div>
     </Panel>
@@ -200,7 +267,25 @@ function SamplingPage({state}:{state:StationState}) {
   </div>
 }
 
-function Diagnostics({state}:{state:StationState}) {return <div className="page-grid"><Panel title="活动故障" eyebrow="LATCHED & LIVE" className="span-2"><div className="fault-table"><div className="table-head"><span>级别</span><span>代码</span><span>原因</span><span>状态</span><span>时间</span></div>{state.diagnostics.length?state.diagnostics.map((f,i)=><div className="table-row" key={`${f.code}-${i}`}><b className={f.level.toLowerCase()}>{f.level}</b><code>{f.code}</code><span>{f.reason}</span><span>{f.status}</span><time>{new Date(f.timestamp*1000).toLocaleTimeString()}</time></div>):<div className="all-clear"><ShieldCheck/>未发现活动故障</div>}</div></Panel><Panel title="恢复控制" eyebrow="SAFE RECOVERY"><StateBadge state={state.operator_state}/><p>恢复按钮调用既有清错、ACK 和任务恢复流程，不会通过清除网页状态解除锁存。</p><button className="primary full" onClick={()=>command('recover')}>执行受控恢复</button></Panel><Panel title="事件时间线" eyebrow="RECENT EVENTS"><EventList state={state}/></Panel></div>}
+type LimitRecoveryResult={ok:boolean;needs_recovery:boolean;recovered:boolean;exit_code:number;command:string;host:string;port:number;target:string;output:string}
+function Diagnostics({state}:{state:StationState}) {
+  const {sessionReady}=useStation()
+  const [limitResult,setLimitResult]=useState<LimitRecoveryResult|null>(null)
+  const [limitBusy,setLimitBusy]=useState<'query'|'recover'|''>('')
+  const [confirmLimit,setConfirmLimit]=useState(false)
+  const [limitTarget,setLimitTarget]=useState('192.168.1.18:8080')
+  useEffect(()=>{api<{target?:string}>('/api/v1/limit-recovery/config').then(value=>{if(value.target)setLimitTarget(value.target)}).catch(()=>{})},[])
+  const queryLimit=async()=>{setLimitBusy('query');try{setLimitResult(await api<LimitRecoveryResult>('/api/v1/limit-recovery'))}finally{setLimitBusy('')}}
+  const recoverLimit=async()=>{setConfirmLimit(false);setLimitBusy('recover');try{setLimitResult(await api<LimitRecoveryResult>('/api/v1/limit-recovery',{method:'POST'}))}finally{setLimitBusy('')}}
+  const commandPath='/home/zjh/project/RealMan/realman_limit_recovery.py'
+  return <div className="page-grid">
+    <Panel title="活动故障" eyebrow="LATCHED & LIVE" className="span-2"><div className="fault-table"><div className="table-head"><span>级别</span><span>代码</span><span>原因</span><span>状态</span><span>时间</span></div>{state.diagnostics.length?state.diagnostics.map((f,i)=><div className="table-row" key={`${f.code}-${i}`}><b className={f.level.toLowerCase()}>{f.level}</b><code>{f.code}</code><span>{f.reason}</span><span>{f.status}</span><time>{new Date(f.timestamp*1000).toLocaleTimeString()}</time></div>):<div className="all-clear"><ShieldCheck/>未发现活动故障</div>}</div></Panel>
+    <Panel title="恢复控制" eyebrow="SAFE RECOVERY"><StateBadge state={state.operator_state}/><p>恢复按钮调用既有清错、ACK 和任务恢复流程，不会通过清除网页状态解除锁存。</p><button className="primary full" disabled={!sessionReady} onClick={()=>command('recover')}>执行受控恢复</button></Panel>
+    <Panel title="机械臂软限位" eyebrow="0X1016 · LIMIT RECOVERY" className="span-2"><p className="muted">先执行只读查询。修复会清除 4118 错误，并让接近软限位的关节以 5% 速度退到安全裕量。当前目标控制器：<b>{limitResult?.target||limitTarget}</b></p><div className="limit-command"><code>{commandPath}{limitResult?.command.endsWith('--recover --yes')?' --recover --yes':''}</code></div><div className="button-row"><button disabled={!!limitBusy} onClick={queryLimit}>{limitBusy==='query'?'查询中…':'查询限位'}</button><button className="danger-button" disabled={!!limitBusy||!sessionReady||state.offline||state.simulation} onClick={()=>setConfirmLimit(true)}>{limitBusy==='recover'?'修复中…':'修复限位'}</button></div>{limitResult&&<><div className={`limit-summary ${limitResult.recovered||(!limitResult.needs_recovery&&limitResult.ok)?'ok':limitResult.needs_recovery?'warning':''}`}>{limitResult.recovered?'限位修复并复检成功':limitResult.needs_recovery?'检测到关节接近软限位，需要修复':'未检测到需修复的软限位'}</div><pre className="hardware-output limit-output">{limitResult.output}</pre></>}<p className="safety-note"><ShieldCheck size={16}/>修复前必须取得控制权，并确认机械臂周围净空、急停可用且所有人员远离运动范围。</p></Panel>
+    <Panel title="事件时间线" eyebrow="RECENT EVENTS"><EventList state={state}/></Panel>
+    {confirmLimit&&<ConfirmDialog title="确认修复机械臂软限位" detail={`${commandPath} --recover --yes\n目标控制器：${limitTarget}\n\n该命令会清除 4118 错误，并驱动接近软限位的关节低速运动。请确认现场净空、急停可用、所有人员均已离开机械臂运动范围。`} cancelLabel="取消，不执行修复" confirmLabel="确认现场安全并修复" onCancel={()=>setConfirmLimit(false)} onConfirm={recoverLimit}/>}
+  </div>
+}
 
 function Parameters() {const [data,setData]=useState<Record<string,any>|null>(null);useEffect(()=>{api<Record<string,any>>('/api/v1/parameters').then(setData)},[]);return <div className="page-grid parameters"><Panel title="只读参数快照" eyebrow="YAML · READ ONLY" className="span-3"><p className="muted">网页不提供写参数控件，不会修改运行中的 ROS 安全阈值。</p>{data&&Object.entries(data.sources||{}).map(([name,src]:any)=><details key={name} open><summary>{name}<small>{src.path}</small></summary><pre>{JSON.stringify(src.values,null,2)}</pre></details>)}</Panel></div>}
 
@@ -222,8 +307,8 @@ export function App() {
     return()=>window.removeEventListener('unhandledrejection',report)
   },[setError])
   const acquire=async()=>{try{if(state?.offline){throw new Error('OFFLINE模式禁止取得控制权')};const r=await api<{session_id:string}>('/api/v1/control/session',{method:'POST',body:JSON.stringify({client:navigator.userAgent})});setSession(r.session_id)}catch(e){setError(String(e))}}
-  const release=async()=>{try{await api('/api/v1/control/session',{method:'DELETE'})}finally{setSession(null)}}
+  const release=async()=>{try{if(['JOGGING','STOPPING','LIMIT_REACHED'].includes(state?.cartesian_jog?.state||''))await api('/api/v1/cartesian/jog/stop',{method:'POST'});await api('/api/v1/control/session',{method:'DELETE'})}finally{setSession(null)}}
   const estop=()=>command('emergency_stop').catch(e=>setError(String(e)))
-  const content=useMemo(()=>{if(!state)return <div className="loading"><RefreshCw className="spin"/>正在连接 RM75 Web Backend…</div>;if(view==='dashboard')return <Dashboard state={state}/>;if(view==='robot')return model?<RobotPage state={state} model={model}/>:<div className="loading">装载厂商模型…</div>;if(view==='force')return <ForcePage state={state}/>;if(view==='qr')return <VisionPage state={state}/>;if(view==='tools')return <ToolsPage state={state}/>;if(view==='robotctl')return <RobotControlPage state={state}/>;if(view==='sampling')return <SamplingPage state={state}/>;if(view==='diagnostics')return <Diagnostics state={state}/>;return <Parameters/>},[view,state,model])
+  const content=useMemo(()=>{if(!state)return <div className="loading"><RefreshCw className="spin"/>正在连接 RM75 Web Backend…</div>;if(view==='dashboard')return <Dashboard state={state}/>;if(view==='robot')return model?<RobotPage state={state} model={model}/>:<div className="loading">装载厂商模型…</div>;if(view==='cartesian')return <CartesianJogPage state={state}/>;if(view==='force')return <ForcePage state={state}/>;if(view==='qr')return <VisionPage state={state}/>;if(view==='tools')return <ToolsPage state={state}/>;if(view==='robotctl')return <RobotControlPage state={state}/>;if(view==='sampling')return <SamplingPage state={state}/>;if(view==='diagnostics')return <Diagnostics state={state}/>;return <Parameters/>},[view,state,model])
   return <div className="app"><aside className={`sidebar ${menu?'open':''}`}><div className="brand"><div className="brand-mark"><Bot/></div><div><b>RM75</b><span>ALPINE SAMPLING</span></div></div><nav>{nav.map(([key,label,Icon])=><button key={key} className={view===key?'active':''} onClick={()=>{setView(key);setMenu(false)}}><Icon/><span>{label}</span></button>)}</nav><div className="sidebar-foot"><span>CONTROL PLATFORM</span><b>v1.0 · ROS Noetic</b></div></aside><main><header className="topbar"><button className="menu-button" onClick={()=>setMenu(!menu)}><Menu/></button><div className="breadcrumb"><span>高原寒区采样机器人</span><ChevronRight/><b>{nav.find(n=>n[0]===view)?.[1]}</b></div><div className="global-status"><span className={`connection ${connected?'on':''}`}><Radio/>{connected?'WebSocket 实时':'通信断开'}</span>{state?.offline&&<span className="offline">OFFLINE / 禁止控制</span>}{state?.simulation&&<span className="simulation">SIMULATION / 无物理输出</span>}<StateBadge state={state?.operator_state}/>{sessionId?<button className={`lease ${sessionReady?'ready':''}`} onClick={release}><Power/>{sessionReady?'控制权已就绪':'建立心跳…'}</button>:<button className="lease" onClick={acquire}><Unplug/>取得控制权</button>}<button className="estop" disabled={!sessionReady} onClick={estop}><OctagonX/>软件急停</button></div></header><div className="content">{lastError&&<div className="toast" onClick={()=>setError('')}><b>操作未完成</b><span>{lastError}</span><i>×</i></div>}{content}</div><footer><div><Activity/>刷新序列 <b>{state?.sequence??'—'}</b></div><div>数据时间 <b>{state?new Date(state.timestamp*1000).toLocaleTimeString():'—'}</b></div><div>控制会话 <b>{sessionReady?'独占 / 心跳有效':'只读'}</b></div></footer></main></div>
 }

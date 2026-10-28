@@ -67,10 +67,10 @@ class HybridForceControl {
     setpoint = filtered;
     dwell_ = 0;
   }
-  // Enter the force loop at an already-established contact.  This deliberately
-  // skips the free-space/contact search transition; callers must perform their
-  // own freshness, frame and wrench-limit checks before invoking it.
-  void beginContact(double measured_z) {
+  // Start bounded force-controlled Z feed immediately from the current pose.
+  // No established contact is required: in free space the force error drives
+  // the tool downward, and after contact the same loop regulates force.
+  void beginForceFeed(double measured_z) {
     if (!have_force || !std::isfinite(measured_z) ||
         std::abs(raw) > cfg.force_limit) {
       stop();
@@ -81,6 +81,8 @@ class HybridForceControl {
     setpoint = filtered;
     dwell_ = 0;
   }
+  // Compatibility entry point for existing already-contacted callers.
+  void beginContact(double measured_z) { beginForceFeed(measured_z); }
   bool transition(double measured_z, double dt) {
     if (mode == ControlMode::SAFE_STOP || !have_force) return false;
     const bool condition = mode == ControlMode::POSITION_MODE ?

@@ -16,6 +16,10 @@ flowchart LR
   API --> Services[Web service layer]
   Services --> RI[复用 ROSInterface / Monitor]
   Services --> TM[复用 TaskManager]
+  Services --> CJ[Cartesian Jog 白名单适配]
+  CJ --> CJS[rm75_cartesian_jog_server]
+  CJS --> GW[CommandSourceManager + GuardedCommandGateway]
+  GW --> Driver
   Services --> SM[复用 SystemLaunchManager]
   Services --> EL[复用 ExperimentLogger]
   TM --> JA[复用 JointControlAdapter]
@@ -39,6 +43,8 @@ JPEG endpoint，浏览器按 D435i 当前 6 Hz 能力刷新。
 - 只有租约有效且 WebSocket 已绑定时，后端才向既有 ROS joint server 发送心跳。
 - 浏览器关闭、网络中断或页面挂起后，续租停止；后端停止 ROS 心跳，既有 350 ms
   看门狗触发取消/软件急停/新 ACK 与静止确认。
+- 笛卡尔点动使用同一租约派生的独立心跳；pointer cancel、失焦、后台、组件卸载会主动停止，
+  断联时由 ROS 侧看门狗兜底。停止成功必须同时满足新 ACK 与新鲜静止反馈。
 - REST 执行、生命周期、工具电压和恢复均要求同一租约。离线模式无条件拒绝控制。
 
 ## 部署
@@ -61,3 +67,7 @@ Three/R3F、Recharts、Zustand、FastAPI、Pydantic 和 WebSocket。
 
 SIMULATION、OFFLINE 与真实执行授权互斥。它用于 Web 集成和安全状态机回归，不是
 Gazebo 动力学、MoveIt PlanningScene、硬件在环或真机安全验收的替代品。
+
+仿真笛卡尔点动从已有 commissioning 证据中的非奇异关节姿态启动，通过相同厂商 URDF
+FK/有界 IK 更新模拟 Link7，并执行 10 mm/5° 上限和租约失效停止；不会连接 ROS 或产生
+任何真实输出。

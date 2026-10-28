@@ -18,6 +18,9 @@
 | DELETE | `/api/v1/control/session` | 主动释放租约 |
 | PUT | `/api/v1/control/path` | 在全部控制子系统停止时选择唯一活动控制路径；不会启动运动 |
 | POST | `/api/v1/joints/execute` | 调用现有自动检查+执行流程 |
+| POST | `/api/v1/cartesian/jog/start` | 以固定 12 方向枚举开始 Link7 受控点动；需要租约 |
+| POST | `/api/v1/cartesian/jog/stop` | 请求停止并等待驱动 ACK 与实际静止确认；需要租约 |
+| GET | `/api/v1/cartesian/jog/status` | 点动状态、方向、实际/目标位姿、限制和停止原因 |
 | GET | `/api/v1/tools` | 读取五个持久化绝对 Link7 取物位姿 |
 | PUT | `/api/v1/tools/{1..5}` | 原子保存 X/Y/Z、Rx/Ry/Rz 和 Lift Height；需要控制租约 |
 | POST | `/api/v1/tools/{1..5}/dry-run` | 仅规划预抓取、严格基坐标 Z 下降/抬升完整路径，不运动 |
@@ -30,6 +33,11 @@
 
 除读取和离线预览外，命令请求必须携带 `X-RM75-Control-Session`。后端不提供“发布任意
 topic”“调用任意 service”“启动任意 launch”或 shell API。
+
+笛卡尔点动的平移参考 `base_link`，旋转参考当前 `Link7` 局部轴，末端参考明确为
+`Link7` 而不是已标定工具 TCP。浏览器只提交固定方向，不提交距离、速度、topic 或 service；
+后端/ROS 执行器硬限制单次 10 mm/5°、Link7 线速度 0.01 m/s 和关节
+0.05 rad/s、0.10 rad/s²、0.50 rad/s³。完整约定见 [CARTESIAN_JOG.md](CARTESIAN_JOG.md)。
 
 五工具位置单位为米、姿态为固定轴 XYZ RPY（弧度），参考系为 `base_link`，目标为
 `Link7`。执行端会再次读取持久化配置；配置改变或机械臂在 Dry Run 后移动都会使计划失效。

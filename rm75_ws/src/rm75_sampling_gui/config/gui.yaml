@@ -8,6 +8,7 @@ log_level: "INFO"
 qr_execution_authorized: false
 trajectory_execution_authorized: false
 joint_control_execution_authorized: false
+cartesian_jog_execution_authorized: false
 supervised_commissioning_authorized: false
 touch_z_force_authorized: false
 tool5_drill_authorized: false
@@ -60,6 +61,22 @@ joint_control:
   cancel_timeout_s: 4.0
   jog_repeat_ms: 180
 
+# base_link translation + local Link7 rotation. These values mirror the
+# deployed Cartesian commissioning envelope and are enforced again by the ROS
+# executor; the browser cannot override them.
+cartesian_jog:
+  link7_speed_mps: 0.01
+  angular_speed_rad_s: 0.0872664626
+  max_translation_m: 0.01
+  max_rotation_rad: 0.0872664626
+  feedback_timeout_sec: 0.10
+  heartbeat_timeout_sec: 0.35
+  stop_observation_sec: 2.0
+  joint_limit_margin_rad: 0.02
+  max_tracking_error_rad: 0.03
+  force_stop_n: 8.0
+  torque_stop_nm: 0.5
+
 # Logs are rotated locally and are also shown in the main window.
 log_directory: "~/.ros/rm75_sampling_gui"
 log_max_bytes: 2097152
@@ -88,12 +105,19 @@ system_launches:
     launch: base_real.launch
     expected_nodes: [/rm_driver, /robot_state_publisher, /move_group, /trajectory_bridge]
     expected_nodes_joint_control: [/rm_driver, /robot_state_publisher, /move_group, /joint_control_server]
+    expected_nodes_cartesian_jog: [/rm_driver, /robot_state_publisher, /move_group, /rm75_cartesian_jog]
     expected_nodes_touch_control: [/rm_driver, /robot_state_publisher, /move_group]
     expected_nodes_tool5_control: [/rm_driver, /robot_state_publisher, /move_group]
     expected_services: [/check_state_validity]
     args:
       execution_enabled: "${TRAJECTORY_EXECUTION_AUTHORIZED}"
       joint_control_execution_authorized: "${JOINT_CONTROL_EXECUTION_AUTHORIZED}"
+      cartesian_jog_execution_authorized: "${CARTESIAN_JOG_EXECUTION_AUTHORIZED}"
+      cartesian_jog_link7_speed_mps: "${CARTESIAN_JOG_LINK7_SPEED_MPS}"
+      cartesian_jog_angular_speed_rad_s: "${CARTESIAN_JOG_ANGULAR_SPEED_RAD_S}"
+      cartesian_jog_max_translation_m: "${CARTESIAN_JOG_MAX_TRANSLATION_M}"
+      cartesian_jog_max_rotation_rad: "${CARTESIAN_JOG_MAX_ROTATION_RAD}"
+      cartesian_jog_heartbeat_timeout_s: "${CARTESIAN_JOG_HEARTBEAT_TIMEOUT_S}"
       touch_z_force_authorized: "${TOUCH_Z_FORCE_AUTHORIZED}"
       tool5_drill_authorized: "${TOOL5_DRILL_AUTHORIZED}"
       supervised_commissioning_authorized: "${SUPERVISED_COMMISSIONING_AUTHORIZED}"
@@ -174,10 +198,11 @@ experiment:
 sampling:
   duration_s: null
 
-# Tool5 relative-depth drilling remains locked until explicitly launched via
-# the dedicated authorization path.  These are conservative pre-commissioning
-# limits, not evidence of a validated rotating-soil force loop.
+# Tool5 owns only the independent auger motor.  Arm descent is deliberately
+# started and stopped from the real-time force page's vertical-force controller.
 tool5_drill:
+  motor_only: true
+  require_force_feedback: false
   desired_force_n: -10.0
   max_axial_force_n: 60.0
   max_torque_nm: 15.0

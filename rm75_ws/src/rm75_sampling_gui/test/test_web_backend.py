@@ -11,10 +11,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from rm75_sampling_gui.web.backend.app import create_app
+import rm75_sampling_gui.web.backend.app as web_app
+from rm75_sampling_gui.web.backend.limit_recovery import run_limit_recovery
 from rm75_sampling_gui.web.backend.services import WebRuntime, load_web_configuration
 from rm75_sampling_gui.web.backend.session import ControlSessionManager, SessionError
 from rm75_sampling_gui.web.backend.hardware import SamplingHardware
 from rm75_sampling_gui.web.backend.tool5_drill import Tool5DrillWorkflow
+from rm75_sampling_gui.state.state_machine import RobotState, StateMachine
 
 
 class _AutomaticPathTasks:
@@ -79,6 +82,25 @@ def test_automatic_path_switch_stops_and_restarts_in_dependency_order():
     ]
 
 
+def test_motor_only_tool5_allows_switch_to_independent_z_force_path():
+    tasks = _AutomaticPathTasks({
+        "base": {"running": True, "owned": True},
+    })
+    runtime = _automatic_path_runtime(tasks)
+    runtime.tool5_drill = type("MotorOnlyDrill", (), {
+        "motor_only": True,
+        "snapshot": lambda self: {"state": "ROTATING"},
+    })()
+
+    result = runtime._activate_control_path("z_force", ("base",))
+
+    assert result["changed"] is True
+    assert runtime.active_control_path == "z_force"
+    assert tasks.calls == [
+        ("stop", "base"), ("path", "z_force"), ("start", "base"),
+    ]
+
+
 def test_pose_pickup_starts_no_camera_or_marker_detector():
     tasks = _AutomaticPathTasks({
         "base": {"running": True, "owned": True},
@@ -130,7 +152,7 @@ def test_automatic_path_switch_rejects_external_subsystems_without_stopping():
     assert runtime.active_control_path == "joint_control"
 
 
-def test_automatic_path_switch_failure_cleans_up_and_falls_back_to_observe():
+def test_automatic_path_switch_failure_restores_previous_path_and_systems():
     tasks = _AutomaticPathTasks({
         "base": {"running": True, "owned": True},
         "camera": {"running": False, "owned": False},
@@ -138,16 +160,17 @@ def test_automatic_path_switch_failure_cleans_up_and_falls_back_to_observe():
     }, fail_start="camera")
     runtime = _automatic_path_runtime(tasks)
 
-    with pytest.raises(RuntimeError, match="已停止新控制链路"):
+    with pytest.raises(RuntimeError, match="已恢复原控制链路joint_control"):
         runtime._activate_control_path(
             "qr_pickup", ("base", "camera", "qr")
         )
 
-    assert runtime.active_control_path == "observe"
+    assert runtime.active_control_path == "joint_control"
     assert tasks.calls == [
         ("stop", "base"), ("path", "qr_pickup"),
         ("start", "base"), ("start", "camera"),
-        ("stop", "base"), ("path", "observe"),
+        ("stop", "base"), ("path", "joint_control"),
+        ("start", "base"),
     ]
 
 
@@ -238,6 +261,7 @@ class _FakeRuntime:
     def model_descriptor(self): return {"model": "RM75-6FB", "joints": [], "visuals": []}
     def parameters(self): return {"gui": {}, "sources": {}, "tools": {}}
     def experiments(self): return []
+    def require_session(self, session_id): return self.sessions.require(session_id)
     def preview(self, target): return {"target": list(target), "violations": []}
     def command(self, name, session_id, payload):
         self.sessions.require(session_id); self.commands.append(name); return {"ok": True}
@@ -248,6 +272,13 @@ class _FakeRuntime:
     def set_control_path(self, session_id, path):
         self.sessions.require(session_id); self.commands.append("path:" + path)
         return {"control_path": path}
+    def cartesian_jog_status(self): return {"state": "IDLE"}
+    def start_cartesian_jog(self, session_id, direction):
+        self.sessions.require(session_id); self.commands.append("jog:" + direction)
+        return {"ok": True, "direction": direction}
+    def stop_cartesian_jog(self, session_id):
+        self.sessions.require(session_id); self.commands.append("jog:stop")
+        return {"ok": True, "stopped": True}
 
 
 def test_rest_preview_never_requires_or_creates_control_session():
@@ -276,6 +307,29 @@ def test_commands_require_websocket_heartbeat_bound_lease():
             assert runtime.commands == ["recover"]
 
 
+def test_cartesian_jog_api_is_lease_bound_and_direction_allowlisted():
+    runtime = _FakeRuntime()
+    with TestClient(create_app(runtime)) as client:
+        assert client.get("/api/v1/cartesian/jog/status").status_code == 200
+        lease = client.post("/api/v1/control/session", json={"client": "jog"}).json()
+        headers = {"X-RM75-Control-Session": lease["session_id"]}
+        assert client.post("/api/v1/cartesian/jog/start",
+                           json={"direction": "x_plus"}, headers=headers).status_code == 409
+        with client.websocket_connect("/api/v1/ws") as socket:
+            socket.send_json({"type": "heartbeat", "session_id": lease["session_id"]})
+            messages = [socket.receive_json(), socket.receive_json()]
+            assert any(item["type"] == "heartbeat_ack" for item in messages)
+            assert client.post("/api/v1/cartesian/jog/start",
+                               json={"direction": "/rm_driver/JointPos"},
+                               headers=headers).status_code == 422
+            assert client.post("/api/v1/cartesian/jog/start",
+                               json={"direction": "rz_minus"},
+                               headers=headers).status_code == 200
+            assert client.post("/api/v1/cartesian/jog/stop",
+                               headers=headers).status_code == 200
+            assert runtime.commands == ["jog:rz_minus", "jog:stop"]
+
+
 def test_control_path_switch_requires_live_exclusive_lease():
     runtime = _FakeRuntime()
     with TestClient(create_app(runtime)) as client:
@@ -292,6 +346,70 @@ def test_control_path_switch_requires_live_exclusive_lease():
             assert response.status_code == 200
             assert response.json()["control_path"] == "z_force"
             assert runtime.commands == ["path:z_force"]
+
+
+def test_limit_recovery_runner_accepts_diagnostic_exit_code_two(tmp_path, monkeypatch):
+    script = tmp_path / "limit_tool.py"
+    script.write_text(
+        "import sys\n"
+        "print('需要恢复：J2')\n"
+        "raise SystemExit(0 if '--recover' in sys.argv else 2)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RM75_LIMIT_RECOVERY_SCRIPT", str(script))
+    monkeypatch.setenv("RM75_ARM_IP", "10.20.30.40")
+    monkeypatch.setenv("RM75_ARM_PORT", "9000")
+
+    diagnosis = run_limit_recovery(False)
+    recovery = run_limit_recovery(True)
+
+    assert diagnosis["needs_recovery"] is True
+    assert diagnosis["exit_code"] == 2
+    assert diagnosis["output"] == "需要恢复：J2"
+    assert diagnosis["target"] == "10.20.30.40:9000"
+    assert recovery["recovered"] is True
+    assert recovery["command"].endswith("--recover --yes")
+
+
+def test_limit_recovery_api_is_read_only_without_lease_and_protects_motion(monkeypatch):
+    calls = []
+
+    def fake_runner(recover=False):
+        calls.append(recover)
+        return {"ok": True, "needs_recovery": False, "recovered": recover,
+                "exit_code": 0, "command": "tool", "output": "ok"}
+
+    monkeypatch.setattr(web_app, "run_limit_recovery", fake_runner)
+    runtime = _FakeRuntime()
+    with TestClient(create_app(runtime)) as client:
+        config = client.get("/api/v1/limit-recovery/config")
+        assert config.status_code == 200
+        assert config.json()["target"]
+        assert client.get("/api/v1/limit-recovery").status_code == 200
+        assert client.post("/api/v1/limit-recovery").status_code == 401
+
+        lease = runtime.sessions.acquire("limit test")
+        runtime.sessions.bind_websocket(lease["session_id"], "test-socket")
+        headers = {"X-RM75-Control-Session": lease["session_id"]}
+        response = client.post("/api/v1/limit-recovery", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["recovered"] is True
+
+    assert calls == [False, True]
+
+
+def test_limit_recovery_motion_is_disabled_in_simulation(monkeypatch):
+    monkeypatch.setattr(web_app, "run_limit_recovery", lambda recover=False: {})
+    runtime = _FakeRuntime()
+    runtime.simulation = True
+    with TestClient(create_app(runtime)) as client:
+        lease = runtime.sessions.acquire("limit test")
+        runtime.sessions.bind_websocket(lease["session_id"], "test-socket")
+        response = client.post(
+            "/api/v1/limit-recovery",
+            headers={"X-RM75-Control-Session": lease["session_id"]},
+        )
+        assert response.status_code == 403
 
 
 def test_spa_entry_is_not_cached_across_frontend_rebuilds(tmp_path):
@@ -367,6 +485,358 @@ def _drill_telemetry():
     }
 
 
+class _Tool5HardwareDouble:
+    def __init__(self):
+        self.commands = []
+        self.keepalive_calls = 0
+        self.motor = {"online": True, "velocity": 0.0}
+
+    def snapshot(self):
+        return {"motor": dict(self.motor)}
+
+    def motor_command(self, name, speed=0.5, duration=3.0):
+        del speed, duration
+        self.commands.append(name)
+        if name == "status":
+            self.motor["online"] = True
+        if name == "stop":
+            self.motor["velocity"] = 0.0
+        return {"ok": True, "command": name}
+
+    def motor_keepalive(self):
+        self.keepalive_calls += 1
+
+
+class _RecordingSimulationHardware(SamplingHardware):
+    def __init__(self):
+        super().__init__({}, simulation=True)
+        self.commands = []
+
+    def motor_command(self, name, speed=0.5, duration=3.0, on_started=None):
+        self.commands.append(name)
+        return super().motor_command(name, speed, duration, on_started)
+
+
+class _BlockingTool5Hardware(_Tool5HardwareDouble):
+    def __init__(self):
+        super().__init__()
+        self.before_motor_launch = threading.Event()
+        self.allow_motor_launch = threading.Event()
+        self.release_motor = threading.Event()
+
+    def motor_command(self, name, speed=0.5, duration=3.0, on_started=None):
+        del speed, duration
+        if name != "dig_continuous":
+            return super().motor_command(name)
+        self.before_motor_launch.set()
+        assert self.allow_motor_launch.wait(timeout=1.0)
+        self.commands.append(name)
+        self.motor["velocity"] = 0.5
+        if on_started is not None:
+            on_started()
+        self.release_motor.wait(timeout=1.0)
+        self.motor["velocity"] = 0.0
+        return {"ok": True, "command": name}
+
+
+def _starting_tool5(raw, hardware, lease_active=lambda: True):
+    arm_stops = []
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.05}, hardware, lambda: raw,
+        lambda: None, lambda depth: None, lambda: None,
+        lambda: arm_stops.append("safe_stop"), lease_active,
+        simulation=False)
+    with workflow._lock:
+        workflow._status.update({"state": "STARTING", "feed_state": "STARTING"})
+    return workflow, arm_stops
+
+
+def test_tool5_starting_snapshot_does_not_stop_before_outputs_begin():
+    raw = _drill_telemetry()
+    raw["fresh"]["joints"] = False
+    hardware = _Tool5HardwareDouble()
+    workflow, arm_stops = _starting_tool5(raw, hardware)
+
+    status = workflow.snapshot()
+
+    assert status["state"] == "STARTING"
+    assert hardware.commands == []
+    assert arm_stops == []
+
+
+def test_tool5_start_waits_for_fresh_robot_feedback():
+    stale = _drill_telemetry()
+    stale["fresh"] = {"joints": False, "wrench": False, "tcp": False}
+    fresh = _drill_telemetry()
+    snapshots = [stale, stale, fresh]
+    telemetry_calls = []
+
+    def telemetry():
+        telemetry_calls.append(True)
+        return snapshots.pop(0) if snapshots else fresh
+
+    hardware = _RecordingSimulationHardware()
+    actions = []
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.2}, hardware, telemetry,
+        lambda: actions.append("prepare"),
+        lambda depth: actions.append(("engage", depth)),
+        lambda: actions.append("hold"),
+        lambda: actions.append("safe_stop"), lambda: True,
+        simulation=False)
+
+    status = workflow.start(0.001)
+
+    assert status["state"] == "DRILLING"
+    assert len(telemetry_calls) >= 3
+    assert actions == ["prepare", ("engage", 0.001)]
+    workflow.emergency_stop(stop_arm=False)
+
+
+def test_tool5_motor_only_rotates_without_starting_or_holding_arm():
+    hardware = SamplingHardware({}, simulation=True)
+    arm_actions = []
+    workflow = Tool5DrillWorkflow(
+        {"tool5_drill": {"motor_only": True}}, hardware,
+        lambda: pytest.fail("motor-only rotation must not require arm telemetry"),
+        lambda: arm_actions.append("prepare"),
+        lambda depth: arm_actions.append(("engage", depth)),
+        lambda: arm_actions.append("hold"),
+        lambda: arm_actions.append("safe_stop"), lambda: True,
+        simulation=True)
+
+    rotating = workflow.start()
+
+    assert rotating["state"] == "ROTATING"
+    assert rotating["motor_running"] is True
+    assert rotating["feed_state"] == "INDEPENDENT"
+    assert arm_actions == []
+    stopped = workflow.stop_rotation()
+    assert stopped["state"] == "COMPLETED"
+    assert stopped["motor_running"] is False
+    assert arm_actions == []
+
+
+def test_motor_only_rotation_and_independent_force_control_run_together():
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    try:
+        lease = runtime.sessions.acquire("motor plus force")
+        runtime.sessions.bind_websocket(lease["session_id"], "motor-force-socket")
+
+        rotation = runtime.command(
+            "start_tool5_rotation", lease["session_id"])
+        force = runtime.command("enter_force_control", lease["session_id"])
+        simultaneous = runtime.snapshot()
+
+        assert rotation["state"] == "ROTATING"
+        assert force["simulation"] is True
+        assert simultaneous["tool5_drill"]["state"] == "ROTATING"
+        assert simultaneous["tool5_drill"]["motor_running"] is True
+        assert simultaneous["control_launch_mode"] == "force_control"
+        runtime.command("stop_sampling", lease["session_id"])
+        assert runtime.command(
+            "stop_tool5_rotation", lease["session_id"])["state"] == "COMPLETED"
+    finally:
+        runtime.close()
+
+
+def test_tool5_engages_z_feed_before_motor_and_keeps_both_active():
+    events = []
+
+    class OrderedHardware(SamplingHardware):
+        def motor_command(self, name, speed=0.5, duration=3.0, on_started=None):
+            if name == "dig_continuous":
+                events.append("motor")
+            return super().motor_command(name, speed, duration, on_started)
+
+    hardware = OrderedHardware({}, simulation=True)
+    workflow = Tool5DrillWorkflow(
+        {}, hardware, _drill_telemetry, lambda: events.append("prepare"),
+        lambda depth: events.append(("z_feed", depth)), lambda: None,
+        lambda: events.append("safe_stop"), lambda: True, simulation=True)
+
+    status = workflow.start(0.01)
+
+    assert events[:3] == ["prepare", ("z_feed", 0.01), "motor"]
+    assert status["state"] == "DRILLING"
+    assert status["feed_state"] == "FEEDING"
+    assert status["motor_running"] is True
+    workflow.emergency_stop(stop_arm=False)
+
+
+def test_tool5_start_feedback_timeout_safe_stops():
+    stale = _drill_telemetry()
+    stale["health"]["driver"] = False
+    stale["fresh"] = {"joints": False, "wrench": False, "tcp": False}
+    hardware = _RecordingSimulationHardware()
+    arm_stops = []
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.02}, hardware, lambda: stale,
+        lambda: None, lambda depth: None, lambda: None,
+        lambda: arm_stops.append("safe_stop"), lambda: True,
+        simulation=False)
+
+    with pytest.raises(RuntimeError, match="启动反馈等待超时"):
+        workflow.start(0.001)
+
+    status = workflow.snapshot()
+    assert status["state"] == "SAFE_STOP"
+    assert "driver, joints, tcp" in status["fault_reason"]
+    assert hardware.commands == ["stop"]
+    assert arm_stops == ["safe_stop"]
+
+
+def test_tool5_starting_still_stops_when_lease_is_lost():
+    hardware = _Tool5HardwareDouble()
+    workflow, arm_stops = _starting_tool5(
+        _drill_telemetry(), hardware, lease_active=lambda: False)
+
+    status = workflow.snapshot()
+
+    assert status["state"] == "SAFE_STOP"
+    assert "租约" in status["fault_reason"]
+    assert hardware.commands == ["stop"]
+    assert arm_stops == ["safe_stop"]
+
+
+def test_tool5_starting_with_motor_output_applies_runtime_safety():
+    raw = _drill_telemetry()
+    raw["fresh"]["tcp"] = False
+    hardware = _Tool5HardwareDouble()
+    workflow, arm_stops = _starting_tool5(raw, hardware)
+    with workflow._lock:
+        workflow._motor_running = True
+        workflow._started_monotonic = time.monotonic()
+
+    status = workflow.snapshot()
+
+    assert status["state"] == "SAFE_STOP"
+    assert "tcp反馈超时" in status["fault_reason"]
+    assert hardware.keepalive_calls == 1
+    assert hardware.commands == ["stop"]
+    assert arm_stops == ["safe_stop"]
+
+
+def test_tool5_live_start_aborts_when_lease_is_lost_during_feedback_wait():
+    stale = _drill_telemetry()
+    stale["fresh"] = {"joints": False, "wrench": False, "tcp": False}
+    fresh = _drill_telemetry()
+    feedback_fresh = threading.Event()
+    telemetry_seen = threading.Event()
+    lease = {"active": True}
+    hardware = _BlockingTool5Hardware()
+    actions = []
+    errors = []
+
+    def telemetry():
+        telemetry_seen.set()
+        return fresh if feedback_fresh.is_set() else stale
+
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.5}, hardware, telemetry,
+        lambda: actions.append("prepare"),
+        lambda depth: actions.append(("engage", depth)), lambda: None,
+        lambda: actions.append("safe_stop"), lambda: lease["active"],
+        simulation=False)
+    worker = threading.Thread(
+        target=lambda: _capture_error(errors, workflow.start, 0.001))
+    worker.start()
+    assert telemetry_seen.wait(timeout=1.0)
+
+    lease["active"] = False
+    assert workflow.snapshot()["state"] == "SAFE_STOP"
+    feedback_fresh.set()
+    hardware.allow_motor_launch.set()
+    hardware.release_motor.set()
+    worker.join(timeout=1.0)
+
+    assert not worker.is_alive()
+    assert errors and "中止" in errors[0]
+    assert workflow.snapshot()["state"] == "SAFE_STOP"
+    assert hardware.commands == ["stop"]
+    assert actions == ["safe_stop"]
+
+
+def test_tool5_live_start_aborts_when_lease_is_lost_after_prepare():
+    lease = {"active": True}
+    prepared = threading.Event()
+    resume_prepare = threading.Event()
+    hardware = _BlockingTool5Hardware()
+    actions = []
+    errors = []
+
+    def prepare():
+        actions.append("prepare")
+        prepared.set()
+        assert resume_prepare.wait(timeout=1.0)
+
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.5}, hardware, _drill_telemetry,
+        prepare, lambda depth: actions.append(("engage", depth)), lambda: None,
+        lambda: actions.append("safe_stop"), lambda: lease["active"],
+        simulation=False)
+    worker = threading.Thread(
+        target=lambda: _capture_error(errors, workflow.start, 0.001))
+    worker.start()
+    assert prepared.wait(timeout=1.0)
+
+    lease["active"] = False
+    assert workflow.snapshot()["state"] == "SAFE_STOP"
+    resume_prepare.set()
+    hardware.allow_motor_launch.set()
+    hardware.release_motor.set()
+    worker.join(timeout=1.0)
+
+    assert not worker.is_alive()
+    assert errors and "中止" in errors[0]
+    assert workflow.snapshot()["state"] == "SAFE_STOP"
+    assert hardware.commands == ["stop"]
+    assert actions == ["prepare", "safe_stop"]
+
+
+def test_tool5_motor_launch_and_safe_stop_are_serialized():
+    lease = {"active": True}
+    hardware = _BlockingTool5Hardware()
+    actions = []
+    errors = []
+    workflow = Tool5DrillWorkflow(
+        {"feedback_timeout_s": 0.5}, hardware, _drill_telemetry,
+        lambda: actions.append("prepare"),
+        lambda depth: actions.append(("engage", depth)), lambda: None,
+        lambda: actions.append("safe_stop"), lambda: lease["active"],
+        simulation=False)
+    starter = threading.Thread(
+        target=lambda: _capture_error(errors, workflow.start, 0.001))
+    starter.start()
+    assert hardware.before_motor_launch.wait(timeout=1.0)
+
+    lease["active"] = False
+    stopper = threading.Thread(target=workflow.snapshot)
+    stopper.start()
+    time.sleep(0.02)
+    hardware.allow_motor_launch.set()
+    stopper.join(timeout=1.0)
+    hardware.release_motor.set()
+    starter.join(timeout=1.0)
+
+    assert not stopper.is_alive()
+    assert not starter.is_alive()
+    assert workflow.snapshot()["state"] == "SAFE_STOP"
+    assert hardware.commands[-1] == "stop"
+    assert "dig_continuous" not in hardware.commands[hardware.commands.index("stop") + 1:]
+    assert actions == ["prepare", ("engage", 0.001), "safe_stop"]
+
+
+def _capture_error(errors, callback, *args):
+    try:
+        callback(*args)
+    except Exception as error:
+        errors.append(str(error))
+
+
 def test_tool5_depth_reached_keeps_motor_running_then_stops_without_retract():
     hardware = SamplingHardware({}, simulation=True)
     raw = _drill_telemetry()
@@ -392,7 +862,6 @@ def test_tool5_depth_reached_keeps_motor_running_then_stops_without_retract():
 @pytest.mark.parametrize("mutation,reason", [
     (lambda raw: raw["wrench"].update(Fz=61.0), "轴向力"),
     (lambda raw: raw["wrench"].update(Tx=15.1), "力矩"),
-    (lambda raw: raw["fresh"].update(wrench=False), "反馈超时"),
     (lambda raw: raw.update(stop_reason="joint tracking error exceeded"), "tracking"),
 ])
 def test_tool5_runtime_faults_safe_stop_motor_and_feed(mutation, reason):
@@ -413,12 +882,33 @@ def test_tool5_runtime_faults_safe_stop_motor_and_feed(mutation, reason):
     assert calls == ["safe_stop"]
 
 
+def test_tool5_missing_force_feedback_does_not_block_direct_z_start():
+    hardware = SamplingHardware({}, simulation=True)
+    raw = _drill_telemetry()
+    raw["fresh"]["wrench"] = False
+    raw["wrench"] = {}
+    actions = []
+    workflow = Tool5DrillWorkflow(
+        {"tool5_drill": {"max_z_velocity_m_s": 0.05,
+                         "require_force_feedback": False}},
+        hardware, lambda: raw, lambda: actions.append("prepare"),
+        lambda depth: actions.append(("engage", depth)), lambda: None,
+        lambda: actions.append("safe_stop"), lambda: True, simulation=True)
+
+    status = workflow.start(0.002)
+
+    assert status["state"] == "DRILLING"
+    assert status["feed_control"] == "BOUNDED_POSITION"
+    assert actions == ["prepare", ("engage", 0.002)]
+    workflow.emergency_stop(stop_arm=False)
+
+
 def test_tool5_motor_stop_failure_is_safe_stop():
     class BrokenStopHardware(SamplingHardware):
-        def motor_command(self, name, speed=0.5, duration=3.0):
+        def motor_command(self, name, speed=0.5, duration=3.0, on_started=None):
             if name == "stop":
                 raise RuntimeError("stop ACK missing")
-            return super().motor_command(name, speed, duration)
+            return super().motor_command(name, speed, duration, on_started)
     hardware = BrokenStopHardware({}, simulation=True)
     workflow = Tool5DrillWorkflow(
         {"tool5_drill": {"max_z_velocity_m_s": 0.05}},
@@ -446,6 +936,64 @@ def test_tool5_continuous_motor_has_no_fixed_time_limit_and_remains_stoppable():
     assert workflow.stop_rotation()["state"] == "COMPLETED"
 
 
+def test_tool5_completed_task_restarts_directly_without_manual_reset():
+    hardware = SamplingHardware({}, simulation=True)
+    actions = []
+    workflow = Tool5DrillWorkflow(
+        {"tool5_drill": {"max_z_velocity_m_s": 0.05}},
+        hardware, _drill_telemetry, lambda: actions.append("prepare"),
+        lambda depth: actions.append(("engage", depth)), lambda: None,
+        lambda: None, lambda: True, simulation=True)
+
+    workflow.start(0.002)
+    assert workflow.stop_rotation()["state"] == "COMPLETED"
+    restarted = workflow.start(0.003)
+
+    assert restarted["state"] == "DRILLING"
+    assert actions == ["prepare", ("engage", 0.002),
+                       "prepare", ("engage", 0.003)]
+    workflow.emergency_stop(stop_arm=False)
+
+
+def test_every_cartesian_preset_has_a_bounded_ik_solution():
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    try:
+        poses = runtime.poses()
+        assert poses
+        for pose in poses:
+            result = runtime.inverse_kinematics(pose)
+            assert result["ok"] is True, pose["name"]
+            assert result["position_error_m"] <= 0.006
+            assert result["angle_error_rad"] <= 0.08
+    finally:
+        runtime.close()
+
+
+def test_ik_accepts_accurate_bounded_solution_after_iteration_limit():
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    current = [-0.11796200399398804, 0.6353196165084839,
+               2.8649933265686034, -0.2441429530620575,
+               0.22445934853553773, -1.3730357669830322,
+               4.502780575561523]
+    runtime.snapshot = lambda: {
+        "joints": {"joint{}".format(i + 1): value
+                   for i, value in enumerate(current)}}
+    try:
+        pose = next(item for item in runtime.poses() if item["name"] == "收拢")
+        result = runtime.inverse_kinematics(pose)
+        assert result["ok"] is True
+        assert result["position_error_m"] <= 0.006
+        assert result["angle_error_rad"] <= 0.08
+    finally:
+        runtime.close()
+
+
 def test_simulation_plant_exercises_control_without_ros_output():
     package = Path(__file__).resolve().parents[1]
     config = load_web_configuration(str(package / "config/gui.yaml"),
@@ -464,7 +1012,7 @@ def test_simulation_plant_exercises_control_without_ros_output():
     assert result["simulation"] is True
     time.sleep(0.05)
     moved = runtime.snapshot()
-    assert moved["joints"]["joint1"] > 0
+    assert moved["joints"]["joint1"] > initial["joints"]["joint1"]
     assert runtime.publish_guarded_heartbeat() is False
     z_start = runtime.command("start_z_force_teleop", lease["session_id"])
     assert z_start["simulation"] is True
@@ -508,15 +1056,21 @@ def test_simulation_plant_exercises_control_without_ros_output():
         result = runtime.command(qr_command, lease["session_id"])
         assert result["simulation"] is True
     qr_state = runtime.snapshot()
-    assert qr_state["operator_state"] == "TOOL_HOLD"
+    assert qr_state["operator_state"] == "IDLE"
     assert qr_state["five_target_status"]["targets_valid"] is True
     assert qr_state["five_target_status"]["holding_slot"] == 2
     assert qr_state["five_target_status"]["grasp_confirmed"] is False
     assert len(qr_state["five_targets"]["targets"]) == 5
     assert qr_state["tool_voltage"] == 24
+    runtime.command("start_teleop", lease["session_id"])
+    teleop = runtime.snapshot()
+    assert teleop["operator_state"] == "TELEOP"
+    assert teleop["five_target_status"]["holding_slot"] == 2
+    assert teleop["tool_voltage"] == 24
+    runtime.command("stop_teleop", lease["session_id"])
     runtime.command("cancel_tool", lease["session_id"])
     cancelled = runtime.snapshot()
-    assert cancelled["operator_state"] == "TOOL_HOLD"
+    assert cancelled["operator_state"] == "IDLE"
     assert cancelled["five_target_status"]["holding_slot"] == 2
     runtime.command("return_tool", lease["session_id"])
     returned = runtime.snapshot()
@@ -535,6 +1089,119 @@ def test_simulation_plant_exercises_control_without_ros_output():
     assert runtime.snapshot()["operator_state"] == "IDLE"
     assert runtime.simulation_jpeg().startswith(b"\xff\xd8")
     runtime.close()
+
+
+def test_cartesian_jog_simulation_maps_twelve_directions_and_enforces_release():
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    lease = runtime.sessions.acquire("Cartesian jog mapping")
+    token = lease["session_id"]
+    runtime.sessions.bind_websocket(token, "jog-map-socket")
+    runtime.sessions.timeout_s = 2.0
+    directions = (
+        "x_plus", "x_minus", "y_plus", "y_minus", "z_plus", "z_minus",
+        "rx_plus", "rx_minus", "ry_plus", "ry_minus", "rz_plus", "rz_minus",
+    )
+    try:
+        for direction in directions:
+            runtime.sessions.heartbeat(token, "jog-map-socket")
+            result = runtime.start_cartesian_jog(token, direction)
+            assert result["simulation"] is True
+            assert runtime.cartesian_jog_status()["state"] == "JOGGING"
+            start = runtime._simulation_jog_start_matrix.copy()
+            target = runtime._simulation_jog_target_matrix.copy()
+            rotating = direction.startswith("r")
+            axis = {"x": 0, "y": 1, "z": 2}[
+                direction[1] if rotating else direction[0]]
+            sign = 1.0 if direction.endswith("plus") else -1.0
+            if rotating:
+                relative = start[:3, :3].T.dot(target[:3, :3])
+                expected = runtime._rotation(
+                    axis, sign * runtime._jog_limits["rotation_rad"])
+                assert relative == pytest.approx(expected, abs=1e-10)
+                assert target[:3, 3] == pytest.approx(start[:3, 3], abs=1e-12)
+            else:
+                delta = target[:3, 3] - start[:3, 3]
+                expected = [0.0, 0.0, 0.0]
+                expected[axis] = sign * runtime._jog_limits["translation_m"]
+                assert delta == pytest.approx(expected, abs=1e-12)
+                assert target[:3, :3] == pytest.approx(start[:3, :3], abs=1e-12)
+            with pytest.raises(RuntimeError, match="必须先松开"):
+                runtime.start_cartesian_jog(token, direction)
+            runtime.sessions.heartbeat(token, "jog-map-socket")
+            stopped = runtime.stop_cartesian_jog(token)
+            assert stopped["stopped"] is True
+    finally:
+        runtime.close()
+
+
+def test_cartesian_jog_simulation_limit_and_lease_loss_stop_without_ros_output():
+    package = Path(__file__).resolve().parents[1]
+    config = load_web_configuration(str(package / "config/gui.yaml"),
+                                    str(package / "config/tools.yaml"))
+    runtime = WebRuntime(config, config["tools"], simulation=True)
+    runtime.ros.publish_cartesian_jog_heartbeat = lambda: pytest.fail(
+        "simulation must never publish Cartesian ROS heartbeat")
+    lease = runtime.sessions.acquire("Cartesian jog watchdog")
+    token = lease["session_id"]
+    runtime.sessions.bind_websocket(token, "jog-watchdog-socket")
+    runtime.sessions.timeout_s = 2.0
+    runtime.sessions.heartbeat(token, "jog-watchdog-socket")
+    try:
+        runtime.start_cartesian_jog(token, "x_plus")
+        runtime._simulation_jog_started -= 2.0
+        limited = runtime.snapshot()["cartesian_jog"]
+        assert limited["state"] == "LIMIT_REACHED"
+        assert limited["progress"] == 1.0
+        assert "maximum jog travel" in limited["stop_reason"]
+        runtime.sessions.heartbeat(token, "jog-watchdog-socket")
+        runtime.stop_cartesian_jog(token)
+        runtime.sessions.heartbeat(token, "jog-watchdog-socket")
+        runtime.start_cartesian_jog(token, "rz_plus")
+        assert runtime.sessions.release(token, "jog-watchdog-socket")
+        assert runtime.publish_guarded_heartbeat() is False
+        stopped = runtime.snapshot()["cartesian_jog"]
+        assert stopped["state"] == "STOPPED"
+        assert "lease expired" in stopped["stop_reason"]
+        assert runtime.snapshot()["operator_state"] == "IDLE"
+    finally:
+        runtime.close()
+
+
+def test_cartesian_executor_exit_latches_safe_stop_and_attempts_driver_stop_once():
+    class StopRecorder:
+        def __init__(self):
+            self.calls = 0
+
+        def emergency_stop(self):
+            self.calls += 1
+            return {"acknowledged": True}
+
+    runtime = object.__new__(WebRuntime)
+    runtime.state_machine = StateMachine()
+    runtime.ros = StopRecorder()
+    runtime._cartesian_exit_stop_attempted = False
+    runtime._handle_cartesian_executor_exit()
+    runtime._handle_cartesian_executor_exit()
+    assert runtime.state_machine.state == RobotState.SAFE_STOP
+    assert runtime.ros.calls == 1
+
+
+def test_cartesian_executor_exit_stop_failure_remains_safe_stop():
+    class FailedStop:
+        @staticmethod
+        def emergency_stop():
+            raise RuntimeError("driver ACK timeout")
+
+    runtime = object.__new__(WebRuntime)
+    runtime.state_machine = StateMachine()
+    runtime.ros = FailedStop()
+    runtime._cartesian_exit_stop_attempted = False
+    runtime._handle_cartesian_executor_exit()
+    assert runtime.state_machine.state == RobotState.SAFE_STOP
+    assert runtime._cartesian_exit_stop_attempted is True
 
 
 def test_five_tool_configuration_persists_and_simulation_executes_unverified(tmp_path):

@@ -9,6 +9,7 @@
   <arg name="execution_enabled" default="false"/>
   <arg name="qr_execution_authorized" default="false"/>
   <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="cartesian_jog_execution_authorized" default="false"/>
   <arg name="touch_z_force_authorized" default="false"/>
   <arg name="tool5_drill_authorized" default="false"/>
   <arg name="trajectory_execution_authorized" default="false"/>
@@ -23,6 +24,7 @@
               --execution-enabled $(arg execution_enabled)
               --qr-execution-authorized $(arg qr_execution_authorized)
               --joint-control-execution-authorized $(arg joint_control_execution_authorized)
+              --cartesian-jog-execution-authorized $(arg cartesian_jog_execution_authorized)
               --touch-z-force-authorized $(arg touch_z_force_authorized)
               --tool5-drill-authorized $(arg tool5_drill_authorized)
               --trajectory-execution-authorized $(arg trajectory_execution_authorized)

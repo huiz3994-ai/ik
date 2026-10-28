@@ -12,7 +12,8 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 
-ACTIVE_STATES = {"STARTING", "DRILLING", "DEPTH_REACHED", "STOPPING_MOTOR"}
+ACTIVE_STATES = {"STARTING", "ROTATING", "DRILLING", "DEPTH_REACHED",
+                 "STOPPING_MOTOR"}
 
 
 class Tool5DrillWorkflow:
@@ -33,8 +34,12 @@ class Tool5DrillWorkflow:
         self.max_axial_force_n = float(cfg.get("max_axial_force_n", 60.0))
         self.max_torque_nm = float(cfg.get("max_torque_nm", 15.0))
         self.motor_speed_rad_s = float(cfg.get("motor_speed_rad_s", 0.5))
+        self.motor_only = bool(cfg.get("motor_only", False))
+        self.require_force_feedback = bool(cfg.get("require_force_feedback", False))
         self.motor_watchdog_timeout_s = float(cfg.get("motor_watchdog_timeout_s", 1.0))
         self.sim_feed_velocity_m_s = float(cfg.get("max_z_velocity_m_s", 0.002))
+        self.startup_feedback_timeout_s = max(
+            0.01, min(30.0, float(config.get("feedback_timeout_s", 5.0))))
         if not 0.25 <= self.motor_watchdog_timeout_s <= 2.0:
             raise ValueError("Tool5 motor watchdog must be between 0.25 and 2 seconds")
         self.hardware = hardware
@@ -46,6 +51,10 @@ class Tool5DrillWorkflow:
         self.lease_active = lease_active
         self.simulation = bool(simulation)
         self._lock = threading.RLock()
+        self._output_lock = threading.Lock()
+        self._startup_cancelled = threading.Event()
+        self._motor_launch_event = threading.Event()
+        self._motor_launch_error = ""
         self._motor_thread: Optional[threading.Thread] = None
         self._motor_running = False
         self._operator_stop = False
@@ -58,6 +67,9 @@ class Tool5DrillWorkflow:
             "feed_state": "IDLE", "fault_reason": "",
             "tcp_reference": "Link7 relative Z; Tool5 tip offset pending calibration",
             "tcp_calibrated": False,
+            "force_feedback_required": self.require_force_feedback,
+            "feed_control": ("INDEPENDENT_FORCE_CONTROL" if self.motor_only
+                             else "BOUNDED_POSITION"),
             "motor_watchdog_timeout_s": self.motor_watchdog_timeout_s,
         }
 
@@ -66,37 +78,69 @@ class Tool5DrillWorkflow:
         with self._lock:
             return dict(self._status)
 
-    def start(self, depth_m: float) -> Dict[str, Any]:
+    def start(self, depth_m: float = 0.0) -> Dict[str, Any]:
         depth = float(depth_m)
-        if not math.isfinite(depth) or not 0.0 < depth <= self.max_feed_travel_m:
+        if (not self.motor_only and
+                (not math.isfinite(depth) or
+                 not 0.0 < depth <= self.max_feed_travel_m)):
             raise ValueError("Tool5下降距离必须大于0且不超过独立最大进给行程")
+        if self.motor_only:
+            depth = 0.0
         with self._lock:
+            if self._status["state"] == "COMPLETED":
+                self._status.update({
+                    "state": "IDLE", "target_depth_m": 0.0,
+                    "actual_depth_m": 0.0, "feed_state": "IDLE",
+                    "fault_reason": "", "motor_running": False,
+                })
             if self._status["state"] != "IDLE":
                 raise RuntimeError("Tool5任务不是IDLE；保持中的任务不能再次启动")
             self._status.update({
                 "state": "STARTING", "target_depth_m": depth,
                 "actual_depth_m": 0.0, "fault_reason": "",
-                "feed_state": "STARTING", "motor_running": False,
+                "feed_state": ("INDEPENDENT" if self.motor_only else "STARTING"),
+                "motor_running": False,
             })
             self._operator_stop = False
+            self._motor_launch_error = ""
+            self._motor_launch_event.clear()
+            self._startup_cancelled.clear()
         try:
-            raw = self.telemetry()
-            self._preflight(raw)
-            self.prepare_arm()
-            raw = self.telemetry()
-            tcp = raw.get("tcp", {})
-            self._start_z = float(tcp.get("z", 0.0)) if not self.simulation else 0.0
+            if self.motor_only:
+                self._preflight_motor()
+                self._ensure_starting()
+                self._start_z = None
+            else:
+                raw = self._wait_for_preflight_feedback()
+                self._preflight(raw)
+                self._ensure_starting()
+                self.prepare_arm()
+                self._ensure_starting()
+                raw = self.telemetry()
+                self._ensure_starting()
+                tcp = raw.get("tcp", {})
+                self._start_z = (float(tcp.get("z", 0.0))
+                                 if not self.simulation else 0.0)
             self._started_monotonic = time.monotonic()
+            if not self.motor_only:
+                with self._output_lock:
+                    self._assert_starting_authorized()
+                    self.engage_arm(depth)
+                self._ensure_starting()
             worker = threading.Thread(target=self._run_motor,
                                       name="rm75-tool5-motor", daemon=True)
             with self._lock:
                 self._motor_thread = worker
-                self._motor_running = True
-                self._status["motor_running"] = True
             worker.start()
-            self.engage_arm(depth)
+            self._wait_for_motor_launch()
             with self._lock:
-                self._status.update({"state": "DRILLING", "feed_state": "FEEDING"})
+                if self._status["state"] != "STARTING":
+                    raise RuntimeError("Tool5启动已中止：{}".format(
+                        self._status.get("fault_reason") or self._status["state"]))
+                self._status.update({
+                    "state": "ROTATING" if self.motor_only else "DRILLING",
+                    "feed_state": "INDEPENDENT" if self.motor_only else "FEEDING",
+                })
             return self.snapshot()
         except Exception as error:
             self._safe_stop("Tool5启动失败：{}".format(error))
@@ -108,11 +152,13 @@ class Tool5DrillWorkflow:
                 raise RuntimeError("Tool5电机当前没有活动任务")
             self._operator_stop = True
             self._status["state"] = "STOPPING_MOTOR"
+            motor_thread = self._motor_thread
         errors = []
-        try:
-            self.hold_arm()
-        except Exception as error:
-            errors.append("机械臂保持失败：{}".format(error))
+        if not self.motor_only:
+            try:
+                self.hold_arm()
+            except Exception as error:
+                errors.append("机械臂保持失败：{}".format(error))
         try:
             self.hardware.motor_command("stop")
             self.hardware.motor_command("status")
@@ -122,6 +168,10 @@ class Tool5DrillWorkflow:
                     (not motor.get("online") or velocity is None or
                      abs(float(velocity)) > 0.05)):
                 raise RuntimeError("停止后状态回读未确认零速")
+            if (motor_thread is not None and motor_thread is not threading.current_thread()):
+                motor_thread.join(timeout=1.0)
+                if motor_thread.is_alive():
+                    raise RuntimeError("电机停止后工作线程未退出")
         except Exception as error:
             errors.append("电机停止失败：{}".format(error))
         if errors:
@@ -132,7 +182,8 @@ class Tool5DrillWorkflow:
             self._motor_running = False
             self._status.update({
                 "state": "COMPLETED", "motor_running": False,
-                "feed_state": "HOLDING", "fault_reason": "",
+                "feed_state": ("INDEPENDENT" if self.motor_only else "HOLDING"),
+                "fault_reason": "",
             })
         return self.snapshot()
 
@@ -160,6 +211,8 @@ class Tool5DrillWorkflow:
         with self._lock:
             motor_running = self._motor_running
             motor_age = time.monotonic() - self._started_monotonic
+        if state == "STARTING" and not motor_running:
+            return
         if motor_running:
             try:
                 self.hardware.motor_keepalive()
@@ -167,6 +220,8 @@ class Tool5DrillWorkflow:
                 if motor_age >= 0.5:
                     self._safe_stop(str(error))
                     return
+        if self.motor_only:
+            return
         raw = self.telemetry()
         try:
             self._check_runtime_safety(raw)
@@ -195,6 +250,62 @@ class Tool5DrillWorkflow:
         if reason:
             self._safe_stop(reason)
 
+    def _wait_for_preflight_feedback(self) -> Dict[str, Any]:
+        deadline = time.monotonic() + self.startup_feedback_timeout_s
+        while True:
+            self._ensure_starting()
+            raw = self.telemetry()
+            self._ensure_starting()
+            unavailable = []
+            if not self.simulation and not raw.get("health", {}).get("driver"):
+                unavailable.append("driver")
+            fresh = raw.get("fresh", {})
+            required_feedback = ["joints", "tcp"]
+            if self.require_force_feedback:
+                required_feedback.append("wrench")
+            unavailable.extend(key for key in required_feedback if not fresh.get(key))
+            if not unavailable:
+                return raw
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                raise RuntimeError(
+                    "Tool5启动反馈等待超时：{}".format(", ".join(unavailable)))
+            time.sleep(min(0.05, remaining))
+
+    def _wait_for_motor_launch(self) -> None:
+        deadline = time.monotonic() + self.startup_feedback_timeout_s
+        while not self._motor_launch_event.wait(timeout=0.01):
+            self._ensure_starting()
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Tool5电机启动确认超时")
+        self._ensure_starting()
+        with self._lock:
+            error = self._motor_launch_error
+            motor_running = self._motor_running
+        if error:
+            raise RuntimeError(error)
+        if not motor_running:
+            raise RuntimeError("Tool5电机未确认启动")
+
+    def _ensure_starting(self) -> None:
+        with self._lock:
+            state = self._status["state"]
+            reason = str(self._status.get("fault_reason") or state)
+        if self._startup_cancelled.is_set() or state != "STARTING":
+            raise RuntimeError("Tool5启动已中止：{}".format(reason))
+        if not self.lease_active():
+            reason = "浏览器控制租约或心跳已失效"
+            self._safe_stop(reason)
+            raise RuntimeError("Tool5启动已中止：{}".format(reason))
+
+    def _assert_starting_authorized(self) -> None:
+        with self._lock:
+            state = self._status["state"]
+            reason = str(self._status.get("fault_reason") or state)
+        if (self._startup_cancelled.is_set() or state != "STARTING" or
+                not self.lease_active()):
+            raise RuntimeError("Tool5启动已中止：{}".format(reason))
+
     def _preflight(self, raw: Dict[str, Any]) -> None:
         motor = self.hardware.snapshot().get("motor", {})
         if not motor.get("online"):
@@ -206,10 +317,21 @@ class Tool5DrillWorkflow:
         fresh = raw.get("fresh", {})
         if not self.simulation and not health.get("driver"):
             raise RuntimeError("RM75驱动未就绪")
-        for key in ("joints", "wrench", "tcp"):
+        required_feedback = ["joints", "tcp"]
+        if self.require_force_feedback:
+            required_feedback.append("wrench")
+        for key in required_feedback:
             if not fresh.get(key):
                 raise RuntimeError("{}反馈不可用或过期".format(key))
         self._check_runtime_safety(raw)
+
+    def _preflight_motor(self) -> None:
+        motor = self.hardware.snapshot().get("motor", {})
+        if not motor.get("online"):
+            self.hardware.motor_command("status")
+            motor = self.hardware.snapshot().get("motor", {})
+        if not motor.get("online"):
+            raise RuntimeError("DM-J4310通信不可用")
 
     def _check_runtime_safety(self, raw: Dict[str, Any]) -> None:
         if raw.get("driver_arm_error") or raw.get("driver_system_error"):
@@ -217,9 +339,21 @@ class Tool5DrillWorkflow:
         if raw.get("driver_plan_ok") is False:
             raise RuntimeError("RM75驱动跟踪/规划状态异常")
         fresh = raw.get("fresh", {})
-        for key in ("joints", "wrench", "tcp"):
+        for key in ("joints", "tcp"):
             if not fresh.get(key):
                 raise RuntimeError("{}反馈超时".format(key))
+        if self.require_force_feedback and not fresh.get("wrench"):
+            raise RuntimeError("wrench反馈超时")
+        reason = str(raw.get("stop_reason") or "")
+        if reason and any(word in reason.lower() for word in
+                          ("tracking", "跟踪", "timeout", "超时", "failed", "故障")):
+            raise RuntimeError(reason)
+        if not fresh.get("wrench"):
+            with self._lock:
+                self._status["axial_force_n"] = None
+                self._status["torque_norm_nm"] = None
+                self._status["feed_control"] = "BOUNDED_POSITION"
+            return
         wrench = raw.get("wrench", {})
         fz = float(wrench.get("Fz"))
         torques = [float(wrench.get(key)) for key in ("Tx", "Ty", "Tz")]
@@ -232,19 +366,31 @@ class Tool5DrillWorkflow:
                 float(filtered) if filtered is not None and
                 math.isfinite(float(filtered)) else fz)
             self._status["torque_norm_nm"] = torque_norm
+            self._status["feed_control"] = "BOUNDED_POSITION_WITH_FORCE_GUARD"
         if abs(fz) > self.max_axial_force_n:
             raise RuntimeError("轴向力超过Tool5限制")
         if torque_norm > self.max_torque_nm:
             raise RuntimeError("力矩超过Tool5限制")
-        reason = str(raw.get("stop_reason") or "")
-        if reason and any(word in reason.lower() for word in
-                          ("tracking", "跟踪", "timeout", "超时", "failed", "故障")):
-            raise RuntimeError(reason)
 
     def _run_motor(self) -> None:
+        output_lock_held = False
+
+        def motor_started() -> None:
+            nonlocal output_lock_held
+            with self._lock:
+                self._motor_running = True
+                self._status["motor_running"] = True
+            self._output_lock.release()
+            output_lock_held = False
+            self._motor_launch_event.set()
+
         try:
+            self._output_lock.acquire()
+            output_lock_held = True
+            self._assert_starting_authorized()
             self.hardware.motor_command(
-                "dig_continuous", speed=self.motor_speed_rad_s)
+                "dig_continuous", speed=self.motor_speed_rad_s,
+                on_started=motor_started)
             with self._lock:
                 stopped_by_user = self._operator_stop
                 self._motor_running = False
@@ -252,27 +398,35 @@ class Tool5DrillWorkflow:
             if not stopped_by_user:
                 self._safe_stop("DM-J4310连续命令意外结束")
         except Exception as error:
+            if output_lock_held:
+                self._output_lock.release()
+                output_lock_held = False
             with self._lock:
                 stopped_by_user = self._operator_stop
+                if not self._motor_launch_event.is_set():
+                    self._motor_launch_error = str(error)
                 self._motor_running = False
                 self._status["motor_running"] = False
+            self._motor_launch_event.set()
             if not stopped_by_user:
                 self._safe_stop("DM-J4310命令失败：{}".format(error))
 
     def _safe_stop(self, reason: str, stop_arm: bool = True) -> None:
-        with self._lock:
-            if self._status["state"] == "SAFE_STOP":
-                return
-            self._status.update({
-                "state": "SAFE_STOP", "feed_state": "SAFE_STOP",
-                "fault_reason": str(reason), "motor_running": False,
-            })
-            self._operator_stop = True
-        try:
-            self.hardware.motor_command("stop")
-        except Exception as error:
+        self._startup_cancelled.set()
+        with self._output_lock:
             with self._lock:
-                self._status["fault_reason"] += "; 电机停止失败：{}".format(error)
+                if self._status["state"] == "SAFE_STOP":
+                    return
+                self._status.update({
+                    "state": "SAFE_STOP", "feed_state": "SAFE_STOP",
+                    "fault_reason": str(reason), "motor_running": False,
+                })
+                self._operator_stop = True
+            try:
+                self.hardware.motor_command("stop")
+            except Exception as error:
+                with self._lock:
+                    self._status["fault_reason"] += "; 电机停止失败：{}".format(error)
         if stop_arm:
             try:
                 self.safe_stop_arm()

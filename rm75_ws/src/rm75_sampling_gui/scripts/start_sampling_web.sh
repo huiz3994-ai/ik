@@ -9,7 +9,12 @@ WEB_VENV="/root/rm75_ws/.venv-rm75-web"
 PACKAGE="/root/rm75_ws/src/rm75_sampling_gui"
 ARM_IP="${RM75_ARM_IP:-192.168.1.18}"
 ARM_PORT="${RM75_ARM_PORT:-8080}"
+ARM_IP_EXPLICIT=false
+[[ -n "${RM75_ARM_IP:-}" ]] && ARM_IP_EXPLICIT=true
+ARM_IP_FALLBACK="${RM75_ARM_IP_FALLBACK:-192.168.5.18}"
 HARDWARE_STAGE="${WORKSPACE_ROOT}/.rm75_hardware"
+LIMIT_RECOVERY_SOURCE="${RM75_LIMIT_RECOVERY_SOURCE:-${WORKSPACE_ROOT}/../realman_limit_recovery.py}"
+LIMIT_RECOVERY_STAGE="${HARDWARE_STAGE}/realman_limit_recovery.py"
 RS485_SOURCE="${RM75_RS485_SOURCE:-${HARDWARE_STAGE}/modbus.py}"
 MOTOR_SOURCE="${RM75_MOTOR_SOURCE:-${HARDWARE_STAGE}/motor_control.py}"
 MOTOR_SDK_SOURCE="${RM75_MOTOR_SDK_SOURCE:-${WORKSPACE_ROOT}/work/dm-motor-sdk/Python例程/u2can/DM_CAN.py}"
@@ -42,13 +47,14 @@ while (( "$#" )); do
 done
 
 case "${MODE}" in
-    unified|observe|simulation|z_force|joint_control|pose_pickup|qr_pickup|tool5_drill) ;;
-    *) fail "mode must be unified, observe, simulation, z_force, joint_control, pose_pickup, qr_pickup, or tool5_drill." ;;
+    unified|observe|simulation|z_force|joint_control|cartesian_jog|pose_pickup|qr_pickup|tool5_drill) ;;
+    *) fail "mode must be unified, observe, simulation, z_force, joint_control, cartesian_jog, pose_pickup, qr_pickup, or tool5_drill." ;;
 esac
 SIMULATION=false
 EXECUTION_ENABLED=false
 QR_EXECUTION_AUTHORIZED=false
 JOINT_CONTROL_EXECUTION_AUTHORIZED=false
+CARTESIAN_JOG_EXECUTION_AUTHORIZED=false
 TRAJECTORY_EXECUTION_AUTHORIZED=false
 TOUCH_Z_FORCE_AUTHORIZED=false
 TOOL5_DRILL_AUTHORIZED=false
@@ -69,19 +75,20 @@ case "${MODE}" in
     simulation) SIMULATION=true ;;
     z_force) EXECUTION_ENABLED=true; TOUCH_Z_FORCE_AUTHORIZED=true ;;
     joint_control) EXECUTION_ENABLED=true; JOINT_CONTROL_EXECUTION_AUTHORIZED=true; SUPERVISED_COMMISSIONING_AUTHORIZED=true ;;
+    cartesian_jog) EXECUTION_ENABLED=true; CARTESIAN_JOG_EXECUTION_AUTHORIZED=true; SUPERVISED_COMMISSIONING_AUTHORIZED=true ;;
     pose_pickup) EXECUTION_ENABLED=true; TRAJECTORY_EXECUTION_AUTHORIZED=true ;;
     qr_pickup) EXECUTION_ENABLED=true; QR_EXECUTION_AUTHORIZED=true; TRAJECTORY_EXECUTION_AUTHORIZED=true ;;
     tool5_drill) EXECUTION_ENABLED=true; TOOL5_DRILL_AUTHORIZED=true; SAMPLING_HARDWARE_AUTHORIZED=true ;;
 esac
 
 COMMAND_PATHS=0
-for enabled in "${JOINT_CONTROL_EXECUTION_AUTHORIZED}" "${TRAJECTORY_EXECUTION_AUTHORIZED}" \
+for enabled in "${JOINT_CONTROL_EXECUTION_AUTHORIZED}" "${CARTESIAN_JOG_EXECUTION_AUTHORIZED}" "${TRAJECTORY_EXECUTION_AUTHORIZED}" \
     "${TOUCH_Z_FORCE_AUTHORIZED}" "${TOOL5_DRILL_AUTHORIZED}"; do
     [[ "${enabled}" == true ]] && COMMAND_PATHS=$((COMMAND_PATHS + 1))
 done
-(( COMMAND_PATHS <= 1 )) || fail "joint_control, trajectory_bridge, z_force, and tool5_drill are mutually exclusive."
+(( COMMAND_PATHS <= 1 )) || fail "joint_control, cartesian_jog, trajectory_bridge, z_force, and tool5_drill are mutually exclusive."
 
-echo "Mode=${MODE}; unified=${UNIFIED_CONTROL_AUTHORIZED}; simulation=${SIMULATION}; execution=${EXECUTION_ENABLED}; joint=${JOINT_CONTROL_EXECUTION_AUTHORIZED}; trajectory=${TRAJECTORY_EXECUTION_AUTHORIZED}; z_force=${TOUCH_Z_FORCE_AUTHORIZED}; tool5_drill=${TOOL5_DRILL_AUTHORIZED}; QR=${QR_EXECUTION_AUTHORIZED}; supervised=${SUPERVISED_COMMISSIONING_AUTHORIZED}; sampling_hardware=${SAMPLING_HARDWARE_AUTHORIZED}"
+echo "Mode=${MODE}; unified=${UNIFIED_CONTROL_AUTHORIZED}; simulation=${SIMULATION}; execution=${EXECUTION_ENABLED}; joint=${JOINT_CONTROL_EXECUTION_AUTHORIZED}; cartesian_jog=${CARTESIAN_JOG_EXECUTION_AUTHORIZED}; trajectory=${TRAJECTORY_EXECUTION_AUTHORIZED}; z_force=${TOUCH_Z_FORCE_AUTHORIZED}; tool5_drill=${TOOL5_DRILL_AUTHORIZED}; QR=${QR_EXECUTION_AUTHORIZED}; supervised=${SUPERVISED_COMMISSIONING_AUTHORIZED}; sampling_hardware=${SAMPLING_HARDWARE_AUTHORIZED}"
 if [[ "${DRY_RUN}" == true ]]; then
     echo "DRY-RUN: validation passed; no container, network, ROS, or hardware action was performed."
     exit 0
@@ -89,7 +96,16 @@ fi
 
 preflight_robot() {
     command -v ping >/dev/null 2>&1 || { echo "FAIL: ping command not found; cannot verify robot connectivity." >&2; exit 1; }
-    ping -c 1 -W 1 "${ARM_IP}" >/dev/null 2>&1 || { echo "FAIL: RM75 controller ${ARM_IP} is unreachable." >&2; exit 3; }
+    if ! ping -c 1 -W 1 "${ARM_IP}" >/dev/null 2>&1; then
+        if [[ "${ARM_IP_EXPLICIT}" == false && "${ARM_IP_FALLBACK}" != "${ARM_IP}" ]] && \
+                ping -c 1 -W 1 "${ARM_IP_FALLBACK}" >/dev/null 2>&1; then
+            echo "WARN: preferred RM75 controller ${ARM_IP} is unreachable; using detected fallback ${ARM_IP_FALLBACK}." >&2
+            ARM_IP="${ARM_IP_FALLBACK}"
+        else
+            echo "FAIL: RM75 controller ${ARM_IP} is unreachable." >&2
+            exit 3
+        fi
+    fi
     if command -v nc >/dev/null 2>&1; then
         nc -z -w 2 "${ARM_IP}" "${ARM_PORT}" || { echo "FAIL: RM75 controller ${ARM_IP}:${ARM_PORT} is not accepting connections." >&2; exit 3; }
     else
@@ -118,8 +134,15 @@ stage_sampling_hardware() {
     cp -a "${PYSERIAL_SOURCE}/." "${HARDWARE_STAGE}/python/serial/"
 }
 
+stage_limit_recovery() {
+    [[ -f "${LIMIT_RECOVERY_SOURCE}" ]] || { echo "FAIL: limit recovery tool missing: ${LIMIT_RECOVERY_SOURCE}" >&2; exit 3; }
+    install -d -m 0755 "${HARDWARE_STAGE}"
+    install -m 0755 "${LIMIT_RECOVERY_SOURCE}" "${LIMIT_RECOVERY_STAGE}"
+}
+
 if [[ "${MODE}" != observe && "${MODE}" != simulation ]]; then preflight_robot; fi
 if [[ "${SAMPLING_HARDWARE_AUTHORIZED}" == true ]]; then stage_sampling_hardware; fi
+stage_limit_recovery
 
 command -v docker >/dev/null 2>&1 || { echo "FAIL: docker command not found." >&2; exit 1; }
 command -v flock >/dev/null 2>&1 || { echo "FAIL: flock command not found." >&2; exit 1; }
@@ -168,11 +191,16 @@ trap 'handle_signal 143' TERM
 
 echo "RM75 Web HMI: http://127.0.0.1:${WEB_PORT}"
 echo "Press Ctrl+C for graceful shutdown of the Web backend and HMI-owned ROS launches."
-docker exec -i "${CONTAINER_NAME}" bash -lc \
+docker exec -i \
+  -e RM75_LIMIT_RECOVERY_SCRIPT=/root/rm75_ws/.rm75_hardware/realman_limit_recovery.py \
+  -e RM75_ARM_IP="${ARM_IP}" \
+  -e RM75_ARM_PORT="${ARM_PORT}" \
+  "${CONTAINER_NAME}" bash -lc \
   'source /opt/ros/noetic/setup.bash; source /root/rm75_ws/devel/setup.bash; export PYTHONPATH="/root/rm75_ws/.rm75_hardware/python:${PYTHONPATH:-}"; exec "$@"' \
   bash roslaunch rm75_sampling_gui web.launch port:="${WEB_PORT}" simulation:="${SIMULATION}" \
   execution_enabled:="${EXECUTION_ENABLED}" qr_execution_authorized:="${QR_EXECUTION_AUTHORIZED}" \
   joint_control_execution_authorized:="${JOINT_CONTROL_EXECUTION_AUTHORIZED}" touch_z_force_authorized:="${TOUCH_Z_FORCE_AUTHORIZED}" \
+  cartesian_jog_execution_authorized:="${CARTESIAN_JOG_EXECUTION_AUTHORIZED}" \
   tool5_drill_authorized:="${TOOL5_DRILL_AUTHORIZED}" trajectory_execution_authorized:="${TRAJECTORY_EXECUTION_AUTHORIZED}" \
   supervised_commissioning_authorized:="${SUPERVISED_COMMISSIONING_AUTHORIZED}" sampling_hardware_authorized:="${SAMPLING_HARDWARE_AUTHORIZED}" \
   unified_control_authorized:="${UNIFIED_CONTROL_AUTHORIZED}" &

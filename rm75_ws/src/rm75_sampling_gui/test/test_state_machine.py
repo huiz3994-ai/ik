@@ -18,9 +18,9 @@ class StateMachineTest(unittest.TestCase):
             RobotState.IDLE,
             RobotState.TOOL_DETECT,
             RobotState.TOOL_PICK,
-            RobotState.TOOL_HOLD,
+            RobotState.IDLE,
             RobotState.FORCE_CONTROL,
-            RobotState.TOOL_HOLD,
+            RobotState.IDLE,
             RobotState.TOOL_RETURN,
             RobotState.IDLE,
         ]

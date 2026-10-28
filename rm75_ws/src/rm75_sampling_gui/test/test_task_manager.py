@@ -52,6 +52,7 @@ class FakeROS:
         self.holding_slot = None
         self.drill_depth = None
         self.drill_hold_calls = 0
+        self.drill_ready_waits = 0
 
     def wait_for_node(self, _name, _timeout):
         self.waited_nodes.append(_name)
@@ -59,6 +60,9 @@ class FakeROS:
 
     def wait_for_force_feedback(self, _timeout):
         return None
+
+    def wait_for_tool5_drill_command_ready(self, _timeout):
+        self.drill_ready_waits += 1
 
     def detect_tool(self, tools, preferred, timeout):
         del timeout
@@ -157,7 +161,10 @@ class TaskManagerTest(unittest.TestCase):
         self.manager.detect_tool()
         self.assertEqual(self.machine.state, RobotState.TOOL_DETECT)
         self.manager.pick_tool()
-        self.assertEqual(self.machine.state, RobotState.TOOL_HOLD)
+        self.assertEqual(self.machine.state, RobotState.IDLE)
+        self.manager.start_teleop()
+        self.assertEqual(self.machine.state, RobotState.TELEOP)
+        self.manager.stop_teleop()
         self.manager.set_voltage(24)
         self.manager.enter_force_control()
         self.assertEqual(self.machine.state, RobotState.FORCE_CONTROL)
@@ -186,6 +193,22 @@ class TaskManagerTest(unittest.TestCase):
         self.assertTrue(self.manager.config["trajectory_execution_authorized"])
         self.assertFalse(self.manager.config["qr_execution_authorized"])
 
+    def test_cancel_target_is_idempotent_when_service_is_offline(self):
+        result = self.manager.cancel_target_execution()
+
+        self.assertTrue(result["cancelled"])
+        self.assertTrue(result["already_stopped"])
+        self.assertFalse(result["service_online"])
+        self.assertEqual(self.ros.five_target_calls, [])
+
+    def test_cancel_target_calls_live_five_target_service(self):
+        self.ros.qr_online = True
+
+        result = self.manager.cancel_target_execution()
+
+        self.assertEqual(result["command"], "cancel")
+        self.assertEqual(self.ros.five_target_calls, [("cancel", 0, False)])
+
     def test_force_control_can_start_without_tool_workflow_or_voltage(self):
         result = self.manager.enter_force_control()
         self.assertEqual(result["mode"], "force_control")
@@ -197,6 +220,7 @@ class TaskManagerTest(unittest.TestCase):
         prepared = self.manager.prepare_tool5_drill()
         self.assertEqual(prepared["mode"], "tool5_drill")
         self.assertEqual(self.launches.mode, "tool5_drill")
+        self.assertEqual(self.ros.drill_ready_waits, 1)
         self.manager.engage_tool5_drill(0.03)
         self.assertEqual(self.ros.drill_depth, 0.03)
         held = self.manager.hold_tool5_drill()
@@ -270,7 +294,7 @@ class TaskManagerTest(unittest.TestCase):
 
     def test_disarmed_voltage_is_rejected_without_dispatch(self):
         manager = TaskManager(
-            StateMachine(RobotState.TOOL_HOLD),
+            StateMachine(RobotState.IDLE),
             self.ros,
             [{"name": "Tool1", "slot_id": 0}],
             {},
@@ -353,7 +377,7 @@ class TaskManagerTest(unittest.TestCase):
 
         result = manager.recover()
 
-        self.assertEqual(self.machine.state, RobotState.TOOL_HOLD)
+        self.assertEqual(self.machine.state, RobotState.IDLE)
         self.assertEqual(manager.selected_tool, "Tool5")
         self.assertEqual(result["task"]["holding_slot"], 5)
         self.assertEqual(self.ros.qr_calls, [])
@@ -385,7 +409,7 @@ class TaskManagerTest(unittest.TestCase):
             manager.execute_selected_target()
         self.assertEqual(self.ros.five_target_calls, [])
 
-    def test_single_marker_execute_transitions_to_tool_hold(self):
+    def test_single_marker_execute_returns_to_idle_for_teleop(self):
         manager = TaskManager(
             StateMachine(), self.ros,
             [{"name": "Tool3", "slot_id": 3, "marker_id": 0}],
@@ -396,7 +420,7 @@ class TaskManagerTest(unittest.TestCase):
         manager.select_tool("Tool3")
         result = manager.execute_selected_target()
         self.assertEqual(result["holding_slot"], 3)
-        self.assertEqual(manager.state_machine.state, RobotState.TOOL_HOLD)
+        self.assertEqual(manager.state_machine.state, RobotState.IDLE)
         self.assertEqual(
             self.ros.five_target_calls[-1], ("execute_selected", 3, True))
 
@@ -425,7 +449,7 @@ class TaskManagerTest(unittest.TestCase):
             system_manager=FakeSystemManager())
         manager.select_tool("Tool3")
         manager.state_machine.transition(RobotState.TOOL_PICK, "test pickup")
-        manager.state_machine.transition(RobotState.TOOL_HOLD, "test holding")
+        manager.state_machine.transition(RobotState.IDLE, "test holding")
         result = manager.return_selected_target()
         self.assertEqual(result["voltage_v"], 0)
         self.assertIsNone(result["holding_slot"])
@@ -434,7 +458,7 @@ class TaskManagerTest(unittest.TestCase):
             self.ros.five_target_calls[-1],
             ("return_held_tool", 3, True))
 
-    def test_confirm_selected_tool_held_recovers_tool_hold(self):
+    def test_confirm_selected_tool_held_returns_to_idle(self):
         manager = TaskManager(
             StateMachine(), self.ros,
             [{"name": "Tool1", "slot_id": 1, "marker_id": 0}],
@@ -446,7 +470,7 @@ class TaskManagerTest(unittest.TestCase):
         result = manager.confirm_selected_tool_held()
         self.assertEqual(result["holding_slot"], 1)
         self.assertEqual(result["voltage_v"], 24)
-        self.assertEqual(manager.state_machine.state, RobotState.TOOL_HOLD)
+        self.assertEqual(manager.state_machine.state, RobotState.IDLE)
 
     def test_physical_validation_confirmation_requires_supervised_gate(self):
         manager = TaskManager(

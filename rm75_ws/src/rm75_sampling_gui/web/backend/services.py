@@ -20,7 +20,7 @@ from rm75_sampling_gui.state.state_machine import RobotState, StateMachine
 from rm75_sampling_gui.task.task_manager import TaskManager
 from .session import ControlSessionManager
 from .hardware import SamplingHardware
-from .tool5_drill import Tool5DrillWorkflow
+from .tool5_drill import ACTIVE_STATES, Tool5DrillWorkflow
 
 
 LOG = logging.getLogger("rm75_sampling_gui.web")
@@ -128,8 +128,16 @@ class WebRuntime:
         self._offline_started = time.monotonic()
         self._simulation_lock = threading.RLock()
         self._control_path_lock = threading.RLock()
-        self._simulation_joints = np.zeros(7, dtype=float)
-        self._simulation_target = np.zeros(7, dtype=float)
+        self._cartesian_exit_stop_attempted = False
+        # A collision-free, non-singular posture captured by the existing
+        # Cartesian commissioning evidence. Starting the in-memory plant at
+        # all-zero joints makes some 10 mm/5 deg directions kinematically
+        # unreachable and would not exercise all twelve controls.
+        self._simulation_joints = np.asarray([
+            -2.0259972946, -0.2410891997, -2.7937972946, 0.4415548149,
+            2.8620793129, -1.5531722160, -0.3058461575,
+        ], dtype=float)
+        self._simulation_target = self._simulation_joints.copy()
         self._simulation_velocity = np.zeros(7, dtype=float)
         self._simulation_updated = time.monotonic()
         self._simulation_operator_state = RobotState.IDLE.value
@@ -137,6 +145,19 @@ class WebRuntime:
         self._simulation_stop_reason = ""
         self._simulation_voltage = 0
         self._simulation_force_setpoint = 8.0
+        jog_options = dict(config.get("cartesian_jog", {}))
+        self._jog_limits = {
+            "translation_m": min(0.01, float(jog_options.get("max_translation_m", 0.01))),
+            "rotation_rad": min(math.radians(5.0), float(jog_options.get("max_rotation_rad", math.radians(5.0)))),
+            "linear_speed_mps": min(0.03, max(0.01, float(jog_options.get("link7_speed_mps", 0.01)))),
+            "angular_speed_rad_s": min(math.radians(10.0), max(1e-3, float(jog_options.get("angular_speed_rad_s", math.radians(5.0))))),
+        }
+        self._simulation_jog: Dict[str, Any] = self._empty_jog_status()
+        self._simulation_jog_started = 0.0
+        self._simulation_jog_start_matrix: Optional[np.ndarray] = None
+        self._simulation_jog_target_matrix: Optional[np.ndarray] = None
+        self._simulation_jog_start_joints: Optional[np.ndarray] = None
+        self._simulation_jog_target_joints: Optional[np.ndarray] = None
         self._simulation_subsystems = {name: True for name in ("base", "camera", "qr")}
         self._subsystem_cache: Dict[str, Any] = {}
         self._subsystem_checked = 0.0
@@ -178,6 +199,8 @@ class WebRuntime:
         paths = []
         if config.get("joint_control_execution_authorized", False):
             paths.append("joint_control")
+        if config.get("cartesian_jog_execution_authorized", False):
+            paths.append("cartesian_jog")
         if config.get("touch_z_force_authorized", False):
             paths.append("z_force")
         if config.get("trajectory_execution_authorized", False):
@@ -189,6 +212,96 @@ class WebRuntime:
         if config.get("tool5_drill_authorized", False):
             paths.append("tool5_drill")
         return paths[0] if len(paths) == 1 else "observe"
+
+    def _empty_jog_status(self) -> Dict[str, Any]:
+        return {
+            "state": "IDLE", "direction": "", "stop_reason": "",
+            "reference_frame": "base_link", "rotation_frame": "Link7",
+            "end_effector": "Link7", "tcp_calibrated": False,
+            "progress": 0.0, "actual_pose": {}, "target_pose": {},
+            "limits": dict(getattr(self, "_jog_limits", {
+                "translation_m": 0.01, "rotation_rad": math.radians(5.0),
+                "linear_speed_mps": 0.01,
+                "angular_speed_rad_s": math.radians(5.0),
+            })),
+        }
+
+    @staticmethod
+    def _rotation(axis: int, angle: float) -> np.ndarray:
+        vector = np.zeros(3, dtype=float)
+        vector[axis] = 1.0
+        x, y, z = vector
+        c, s, one = math.cos(angle), math.sin(angle), 1.0 - math.cos(angle)
+        return np.asarray([
+            [c + x*x*one, x*y*one-z*s, x*z*one+y*s],
+            [y*x*one+z*s, c+y*y*one, y*z*one-x*s],
+            [z*x*one-y*s, z*y*one+x*s, c+z*z*one],
+        ], dtype=float)
+
+    @staticmethod
+    def _matrix_pose(matrix: np.ndarray) -> Dict[str, float]:
+        pitch = math.asin(max(-1.0, min(1.0, -float(matrix[2, 0]))))
+        if abs(math.cos(pitch)) > 1e-8:
+            roll = math.atan2(float(matrix[2, 1]), float(matrix[2, 2]))
+            yaw = math.atan2(float(matrix[1, 0]), float(matrix[0, 0]))
+        else:
+            roll = math.atan2(-float(matrix[1, 2]), float(matrix[1, 1]))
+            yaw = 0.0
+        return {"x": float(matrix[0, 3]), "y": float(matrix[1, 3]),
+                "z": float(matrix[2, 3]), "rx": roll, "ry": pitch, "rz": yaw}
+
+    def _advance_simulation_jog(self, now_mono: float) -> None:
+        if self._simulation_jog.get("state") != "JOGGING":
+            return
+        if not self.sessions.snapshot().get("active"):
+            self._simulation_target = self._simulation_joints.copy()
+            self._simulation_jog.update({
+                "state": "STOPPED", "direction": "",
+                "stop_reason": "web control lease expired; simulated stop confirmed",
+            })
+            self._simulation_operator_state = RobotState.IDLE.value
+            return
+        start = self._simulation_jog_start_matrix
+        target = self._simulation_jog_target_matrix
+        start_joints = self._simulation_jog_start_joints
+        target_joints = self._simulation_jog_target_joints
+        if (start is None or target is None or start_joints is None or
+                target_joints is None):
+            self._simulation_jog.update({"state": "SAFE_STOP",
+                                         "stop_reason": "simulation jog pose unavailable"})
+            self._simulation_operator_state = RobotState.SAFE_STOP.value
+            return
+        direction = str(self._simulation_jog["direction"])
+        rotating = direction.startswith("r")
+        maximum = (self._jog_limits["rotation_rad"] if rotating
+                   else self._jog_limits["translation_m"])
+        speed = (self._jog_limits["angular_speed_rad_s"] if rotating
+                 else self._jog_limits["linear_speed_mps"])
+        progress = min(1.0, max(0.0, (now_mono - self._simulation_jog_started) * speed / maximum))
+        desired = start.copy()
+        if rotating:
+            axis = {"x": 0, "y": 1, "z": 2}[direction[1]]
+            sign = 1.0 if direction.endswith("plus") else -1.0
+            desired[:3, :3] = start[:3, :3].dot(
+                self._rotation(axis, sign * maximum * progress))
+        else:
+            axis = {"x": 0, "y": 1, "z": 2}[direction[0]]
+            sign = 1.0 if direction.endswith("plus") else -1.0
+            desired[axis, 3] = start[axis, 3] + sign * maximum * progress
+        # The full-distance target passed IK before STARTED. Interpolate that
+        # fixed solution here so telemetry refresh never performs expensive IK
+        # on the ASGI event loop and therefore cannot starve lease heartbeats.
+        self._simulation_target = (
+            start_joints + (target_joints - start_joints) * progress)
+        self._simulation_jog.update({
+            "progress": progress, "actual_pose": self.robot.tcp(self._simulation_joints),
+            "target_pose": self._matrix_pose(desired),
+        })
+        if progress >= 1.0:
+            self._simulation_jog.update({
+                "state": "LIMIT_REACHED",
+                "stop_reason": "maximum jog travel reached; release before restarting",
+            })
 
     def connect(self) -> bool:
         if self.offline:
@@ -204,6 +317,23 @@ class WebRuntime:
             self._sequence += 1
             return self._sequence
 
+    def _handle_cartesian_executor_exit(self) -> None:
+        """Latch SAFE_STOP and make one ACK-checked driver stop attempt."""
+
+        self.state_machine.fail(
+            RuntimeError("Cartesian executor exited"), "笛卡尔点动执行器")
+        if self._cartesian_exit_stop_attempted:
+            return
+        self._cartesian_exit_stop_attempted = True
+        try:
+            self.ros.emergency_stop()
+        except Exception as error:
+            self.state_machine.fail(
+                RuntimeError(
+                    "Cartesian executor exited; STOP_UNCONFIRMED: {}".format(error)),
+                "笛卡尔点动执行器",
+            )
+
     def snapshot(self) -> Dict[str, Any]:
         if self.simulation:
             with self._simulation_lock:
@@ -216,6 +346,24 @@ class WebRuntime:
         raw["operator_state"] = (self._simulation_operator_state if self.simulation
                                  else self.state_machine.state.value)
         raw["subsystems"] = self._subsystems()
+        if not self.simulation and not self.offline:
+            jog = raw.get("cartesian_jog") or {}
+            jog_state = str(jog.get("state", "IDLE"))
+            if (jog_state == "SAFE_STOP" and
+                    self.state_machine.state != RobotState.SAFE_STOP):
+                self.state_machine.fail(
+                    RuntimeError(str(jog.get("stop_reason") or "Cartesian executor SAFE_STOP")),
+                    "笛卡尔点动执行器",
+                )
+            elif (jog_state == "STOPPED" and
+                  self.state_machine.state == RobotState.JOINT_CONTROL and
+                  self.active_control_path == "cartesian_jog"):
+                self.state_machine.transition(RobotState.IDLE, "笛卡尔点动停稳")
+            elif (self.active_control_path == "cartesian_jog" and
+                  self.state_machine.state == RobotState.JOINT_CONTROL and
+                  not raw["subsystems"].get("base", {}).get("running", False)):
+                self._handle_cartesian_executor_exit()
+            raw["operator_state"] = self.state_machine.state.value
         raw["control_session"] = self.sessions.snapshot()
         raw["selected_tool"] = self.tasks.selected_tool
         if not self.simulation:
@@ -235,12 +383,16 @@ class WebRuntime:
         }
         raw["active_control_path"] = self.active_control_path
         raw["available_control_paths"] = (
-            ["observe", "joint_control", "z_force", "pose_pickup", "qr_pickup",
+            ["observe", "joint_control", "cartesian_jog", "z_force", "pose_pickup", "qr_pickup",
              "tool5_drill"]
             if self.unified_control_authorized else [self.active_control_path]
         )
         raw["sampling_hardware"] = self.hardware.snapshot()
         raw["tool5_drill"] = self.tool5_drill.snapshot()
+        if self.simulation:
+            raw["cartesian_jog"] = dict(self._simulation_jog)
+        else:
+            raw.setdefault("cartesian_jog", self._empty_jog_status())
         if self.simulation:
             raw["configured_pick_status"] = dict(self._simulation_pick_status)
         else:
@@ -292,6 +444,7 @@ class WebRuntime:
         """Advance a deterministic in-memory plant and return realistic telemetry."""
         with self._simulation_lock:
             now_mono = time.monotonic()
+            self._advance_simulation_jog(now_mono)
             dt = min(max(now_mono - self._simulation_updated, 0.0), 0.25)
             error = self._simulation_target - self._simulation_joints
             max_step = np.asarray([
@@ -319,6 +472,8 @@ class WebRuntime:
                 roll = math.atan2(-float(tcp_matrix[1, 2]), float(tcp_matrix[1, 1]))
                 yaw = 0.0
             now = time.time()
+            if self._simulation_jog.get("state") != "IDLE":
+                self._simulation_jog["actual_pose"] = self._matrix_pose(tcp_matrix)
             return {
                 "connected": True,
                 "health": {"master": True, "driver": True, "touch": True,
@@ -459,6 +614,13 @@ class WebRuntime:
 
     def inverse_kinematics(self, pose: Dict[str, Any]) -> Dict[str, Any]:
         """Bounded numerical IK used for preview; execution still uses the guarded joint path."""
+        snap = self.snapshot()
+        seed = np.asarray([snap.get("joints", {}).get(name, 0.0)
+                           for name in JOINT_NAMES], dtype=float)
+        return self._solve_inverse_kinematics(pose, seed)
+
+    def _solve_inverse_kinematics(
+            self, pose: Dict[str, Any], seed: np.ndarray) -> Dict[str, Any]:
         from scipy.optimize import least_squares
         keys = ("x", "y", "z", "rx", "ry", "rz")
         try:
@@ -467,39 +629,150 @@ class WebRuntime:
             raise ValueError("需要有限的x/y/z/rx/ry/rz（米/弧度）") from error
         if not np.isfinite(wanted).all():
             raise ValueError("笛卡尔目标不能包含NaN或无穷值")
-        snap = self.snapshot()
-        seed = np.asarray([snap.get("joints", {}).get(name, 0.0)
-                           for name in JOINT_NAMES], dtype=float)
         lower = np.asarray([self.robot.limits[name][0] for name in JOINT_NAMES])
         upper = np.asarray([self.robot.limits[name][1] for name in JOINT_NAMES])
-        seed = np.clip(seed, lower, upper)
+        seed = np.clip(np.asarray(seed, dtype=float), lower, upper)
 
-        def wrapped(delta: np.ndarray) -> np.ndarray:
-            return (delta + math.pi) % (2.0 * math.pi) - math.pi
+        wanted_rotation = (self._rotation(2, wanted[5]).dot(
+            self._rotation(1, wanted[4])).dot(self._rotation(0, wanted[3])))
+
+        def rotation_vector(matrix: np.ndarray) -> np.ndarray:
+            cosine = max(-1.0, min(1.0, (float(np.trace(matrix)) - 1.0) / 2.0))
+            angle = math.acos(cosine)
+            vee = np.asarray([matrix[2, 1] - matrix[1, 2],
+                              matrix[0, 2] - matrix[2, 0],
+                              matrix[1, 0] - matrix[0, 1]], dtype=float)
+            if angle < 1e-8:
+                return 0.5 * vee
+            return angle * vee / (2.0 * math.sin(angle))
 
         def residual(joints: np.ndarray) -> np.ndarray:
-            actual = self.robot.tcp(joints)
-            current = np.asarray([actual[key] for key in keys], dtype=float)
-            return np.concatenate(((current[:3] - wanted[:3]) * 4.0,
-                                   wrapped(current[3:] - wanted[3:])))
+            matrix = self.robot.forward_kinematics(joints)["Link7"]
+            rotation_error = rotation_vector(
+                wanted_rotation.T.dot(matrix[:3, :3]))
+            return np.concatenate(((matrix[:3, 3] - wanted[:3]) * 4.0,
+                                   rotation_error))
 
         result = least_squares(residual, seed, bounds=(lower, upper),
                                max_nfev=240, xtol=1e-8, ftol=1e-8, gtol=1e-8)
         error = residual(result.x)
         position_error = float(np.linalg.norm(error[:3]) / 4.0)
         angle_error = float(np.linalg.norm(error[3:]))
-        if not result.success or position_error > 0.006 or angle_error > 0.08:
+        # SciPy may report max-function-evaluations even after the bounded
+        # solution has reached the requested pose.  The safety contract is the
+        # final finite residual plus the explicit joint bounds above, not the
+        # optimizer's termination wording.  Reject only an inaccurate result.
+        if (not math.isfinite(position_error) or not math.isfinite(angle_error) or
+                position_error > 0.006 or angle_error > 0.08):
             raise ValueError("IK未收敛：位置误差{:.1f}mm，姿态误差{:.1f}°".format(
                 position_error * 1000.0, angle_error * 180.0 / math.pi))
+        if not result.success:
+            LOG.warning(
+                "IK优化器状态=%s，但最终误差已达标：位置=%.3fmm 姿态=%.3fdeg",
+                result.status, position_error * 1000.0,
+                angle_error * 180.0 / math.pi)
         return {"ok": True, "joints": result.x.tolist(),
                 "tcp": self.robot.tcp(result.x),
-                "position_error_m": position_error, "angle_error_rad": angle_error}
+                "position_error_m": position_error, "angle_error_rad": angle_error,
+                "optimizer_success": bool(result.success),
+                "optimizer_status": int(result.status)}
 
     def execute_cartesian(self, session_id: str, pose: Dict[str, Any]) -> Dict[str, Any]:
         self.require_session(session_id)
         solution = self.inverse_kinematics(pose)
         result = self.execute_joints(session_id, solution["joints"])
         return {"ok": True, "ik": solution, "execution": result}
+
+    def start_cartesian_jog(self, session_id: str, direction: str) -> Dict[str, Any]:
+        self.require_session(session_id)
+        allowed = {
+            "x_plus", "x_minus", "y_plus", "y_minus", "z_plus", "z_minus",
+            "rx_plus", "rx_minus", "ry_plus", "ry_minus", "rz_plus", "rz_minus",
+        }
+        if direction not in allowed:
+            raise ValueError("仅允许固定的十二个笛卡尔点动方向")
+
+        def begin() -> Dict[str, Any]:
+            if self.simulation:
+                with self._simulation_lock:
+                    if self._simulation_operator_state == RobotState.SAFE_STOP.value:
+                        raise RuntimeError("SIMULATION SAFE_STOP已锁存，必须先恢复")
+                    if self._simulation_jog.get("state") in {
+                            "JOGGING", "STOPPING", "LIMIT_REACHED"}:
+                        raise RuntimeError("已有点动方向激活；必须先松开")
+                    if self._simulation_control_launch_mode not in (None, "cartesian_jog"):
+                        raise RuntimeError("其他运动控制源正在运行")
+                    start = self.robot.forward_kinematics(
+                        self._simulation_joints)["Link7"].copy()
+                    target = start.copy()
+                    rotating = direction.startswith("r")
+                    axis = {"x": 0, "y": 1, "z": 2}[
+                        direction[1] if rotating else direction[0]]
+                    sign = 1.0 if direction.endswith("plus") else -1.0
+                    if rotating:
+                        target[:3, :3] = start[:3, :3].dot(self._rotation(
+                            axis, sign * self._jog_limits["rotation_rad"]))
+                    else:
+                        target[axis, 3] += sign * self._jog_limits["translation_m"]
+                    # Reject unreachable directions before reporting STARTED.
+                    solution = self._solve_inverse_kinematics(
+                        self._matrix_pose(target), self._simulation_joints.copy())
+                    self._simulation_jog_start_matrix = start
+                    self._simulation_jog_target_matrix = target
+                    self._simulation_jog_start_joints = self._simulation_joints.copy()
+                    self._simulation_jog_target_joints = np.asarray(
+                        solution["joints"], dtype=float)
+                    self._simulation_jog_started = time.monotonic()
+                    self._simulation_jog = self._empty_jog_status()
+                    self._simulation_jog.update({
+                        "state": "JOGGING", "direction": direction,
+                        "actual_pose": self._matrix_pose(start),
+                        "target_pose": self._matrix_pose(target),
+                    })
+                    self._simulation_operator_state = RobotState.JOINT_CONTROL.value
+                    self._simulation_control_launch_mode = "cartesian_jog"
+                return {"ok": True, "simulation": True,
+                        "direction": direction, "status": dict(self._simulation_jog)}
+            result = self.ros.start_cartesian_jog(direction)
+            self._cartesian_exit_stop_attempted = False
+            self.state_machine.transition(
+                RobotState.JOINT_CONTROL, "开始受控笛卡尔点动 {}".format(direction))
+            return result
+
+        if self.simulation:
+            self.active_control_path = "cartesian_jog"
+            return begin()
+        if not self.unified_control_authorized:
+            if (self.active_control_path != "cartesian_jog" or
+                    not self.config.get("cartesian_jog_execution_authorized", False)):
+                raise RuntimeError("当前启动未授权笛卡尔点动控制路径")
+            return begin()
+        return self._run_on_control_path("cartesian_jog", ("base",), begin)
+
+    def stop_cartesian_jog(self, session_id: str) -> Dict[str, Any]:
+        self.require_session(session_id)
+        if self.simulation:
+            with self._simulation_lock:
+                self._simulation_target = self._simulation_joints.copy()
+                self._simulation_jog.update({
+                    "state": "STOPPED", "direction": "",
+                    "stop_reason": "operator release; simulated stationary feedback confirmed",
+                })
+                self._simulation_operator_state = RobotState.IDLE.value
+                self._simulation_control_launch_mode = None
+                return {"ok": True, "simulation": True, "stopped": True,
+                        "status": dict(self._simulation_jog)}
+        result = self.ros.stop_cartesian_jog()
+        if self.state_machine.state == RobotState.JOINT_CONTROL:
+            self.state_machine.transition(RobotState.IDLE, "笛卡尔点动停止已确认")
+        return result
+
+    def cartesian_jog_status(self) -> Dict[str, Any]:
+        if self.simulation:
+            with self._simulation_lock:
+                return dict(self._simulation_jog)
+        return dict(self.ros.telemetry_snapshot().get(
+            "cartesian_jog", self._empty_jog_status()))
 
     def _ui_path(self, name: str) -> Path:
         return Path(str(self.config["config_path"])).resolve().parent / name
@@ -582,7 +855,7 @@ class WebRuntime:
 
         if not self.unified_control_authorized:
             raise RuntimeError("当前启动未授予网页全部控制功能")
-        if path not in {"observe", "joint_control", "z_force", "pose_pickup",
+        if path not in {"observe", "joint_control", "cartesian_jog", "z_force", "pose_pickup",
                         "qr_pickup", "tool5_drill"}:
             raise ValueError("不支持的控制路径：{}".format(path))
         required = set(required_systems)
@@ -619,7 +892,12 @@ class WebRuntime:
                     "控制源{}正在运行，请先停止后再使用其他功能".format(control_mode)
                 )
             drill_state = str(self.tool5_drill.snapshot().get("state", "IDLE"))
-            if drill_state not in {"IDLE", "COMPLETED"}:
+            motor_only_force_switch = (
+                bool(getattr(self.tool5_drill, "motor_only", False)) and
+                path == "z_force" and drill_state in ACTIVE_STATES
+            )
+            if (drill_state not in {"IDLE", "COMPLETED"} and
+                    not motor_only_force_switch):
                 raise RuntimeError(
                     "Tool5任务{}未安全结束，不能自动切换控制链路".format(drill_state)
                 )
@@ -634,6 +912,7 @@ class WebRuntime:
                 )
             restore = {name for name, status in statuses.items()
                        if status.get("owned")}
+            previous_path = self.active_control_path
             stopped = []
             started = []
             path_changed = False
@@ -665,11 +944,31 @@ class WebRuntime:
                             self.tasks.stop_subsystem(name)
                         except Exception:
                             LOG.exception("自动切换失败后的子系统清理失败：%s", name)
+                    recovery_started = []
+                    recovered = False
                     try:
-                        self.tasks.set_control_path("observe")
-                        self.active_control_path = "observe"
+                        self.tasks.set_control_path(previous_path)
+                        self.active_control_path = previous_path
+                        recovery_desired = set(restore)
+                        if previous_path != "pose_pickup":
+                            recovery_desired.discard("pose")
+                        for name in ("base", "camera", "qr", "pose"):
+                            if name in recovery_desired:
+                                self.tasks.start_subsystem(name)
+                                recovery_started.append(name)
+                        recovered = True
                     except Exception:
-                        LOG.exception("自动切换失败后无法回退到观察模式")
+                        LOG.exception("自动切换失败后无法恢复原控制链路%s", previous_path)
+                        for name in reversed(recovery_started):
+                            try:
+                                self.tasks.stop_subsystem(name)
+                            except Exception:
+                                LOG.exception("原控制链路恢复失败后的清理失败：%s", name)
+                        try:
+                            self.tasks.set_control_path("observe")
+                            self.active_control_path = "observe"
+                        except Exception:
+                            LOG.exception("自动切换失败后无法回退到观察模式")
                 else:
                     for name in ("base", "camera", "qr", "pose"):
                         if name in stopped:
@@ -677,6 +976,12 @@ class WebRuntime:
                                 self.tasks.start_subsystem(name)
                             except Exception:
                                 LOG.exception("切换前停止失败后无法恢复子系统：%s", name)
+                if path_changed and recovered:
+                    raise RuntimeError(
+                        "自动切换到{}失败，已恢复原控制链路{}：{}".format(
+                            path, previous_path, error
+                        )
+                    ) from error
                 raise RuntimeError(
                     "自动切换到{}失败，已停止新控制链路：{}".format(path, error)
                 ) from error
@@ -876,7 +1181,7 @@ class WebRuntime:
             with self._simulation_lock:
                 self.tasks.selected_tool = "Tool{}".format(int(slot_id))
                 self._simulation_voltage = 24
-                self._simulation_operator_state = RobotState.TOOL_HOLD.value
+                self._simulation_operator_state = RobotState.IDLE.value
                 self._simulation_pick_status = {
                     "status": "COMPLETED_UNVERIFIED", "step": 6,
                     "step_name": "运动完成；取物未独立确认", "slot_id": int(slot_id),
@@ -895,7 +1200,9 @@ class WebRuntime:
                 payload: Optional[Dict[str, Any]] = None) -> Any:
         self.require_session(session_id)
         payload = payload or {}
-        if name == "start_tool5_drill":
+        if name in {"start_tool5_drill", "start_tool5_rotation"}:
+            if self.tool5_drill.motor_only:
+                return self.tool5_drill.start()
             if not self.simulation:
                 return self._run_on_control_path(
                     "tool5_drill", ("base",),
@@ -1024,10 +1331,7 @@ class WebRuntime:
                 self._simulation_qr_status["staged_pickup_slot"] = None
                 self._simulation_qr_status["step"] = "安全停止已锁存"
             elif name == "recover":
-                self._simulation_operator_state = (
-                    RobotState.TOOL_HOLD.value
-                    if self._simulation_qr_status["holding_slot"] is not None
-                    else RobotState.IDLE.value)
+                self._simulation_operator_state = RobotState.IDLE.value
                 self._simulation_control_launch_mode = None
                 self._simulation_stop_reason = ""
                 self._simulation_qr_status["step"] = (
@@ -1151,7 +1455,7 @@ class WebRuntime:
             status["grasp_confirmed"] = False
             self._simulation_qr_plan_slot = None
             self._simulation_voltage = 24
-            self._simulation_operator_state = RobotState.TOOL_HOLD.value
+            self._simulation_operator_state = RobotState.IDLE.value
         elif name == "return_tool":
             if status["holding_slot"] != slot:
                 raise RuntimeError("只能归还当前持有的工具")
@@ -1167,7 +1471,7 @@ class WebRuntime:
                 self._simulation_operator_state = RobotState.IDLE.value
                 status["step"] = "二维码任务已终止"
             else:
-                self._simulation_operator_state = RobotState.TOOL_HOLD.value
+                self._simulation_operator_state = RobotState.IDLE.value
                 status["step"] = "运动已终止；仍持有Tool{}".format(
                     status["holding_slot"])
         self._simulation_control_launch_mode = None
@@ -1215,13 +1519,33 @@ class WebRuntime:
 
     def publish_guarded_heartbeat(self) -> bool:
         self.tool5_drill.poll()
-        if self.offline or self.simulation or not self.sessions.snapshot().get("active"):
+        active = bool(self.sessions.snapshot().get("active"))
+        if self.simulation:
+            with self._simulation_lock:
+                if not active and self._simulation_jog.get("state") == "JOGGING":
+                    self._simulation_target = self._simulation_joints.copy()
+                    self._simulation_jog.update({
+                        "state": "STOPPED", "direction": "",
+                        "stop_reason": "web control lease expired; simulated stop confirmed",
+                    })
+                    self._simulation_operator_state = RobotState.IDLE.value
+                    self._simulation_control_launch_mode = None
+            return False
+        if self.offline or not active:
             return False
         self.ros.publish_joint_control_heartbeat()
+        self.ros.publish_cartesian_jog_heartbeat()
         return True
 
     def close(self) -> None:
         try:
+            if not self.offline and not self.simulation:
+                try:
+                    status = self.cartesian_jog_status()
+                    if status.get("state") in {"JOGGING", "STOPPING", "LIMIT_REACHED"}:
+                        self.ros.stop_cartesian_jog()
+                except Exception:
+                    LOG.exception("Web关闭时笛卡尔点动停止未确认")
             self.tool5_drill.emergency_stop("Web平台关闭")
             self.hardware.close()
         finally:

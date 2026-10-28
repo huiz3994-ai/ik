@@ -3,23 +3,30 @@
        is implemented here. Real execution is OFF unless explicitly armed. -->
   <arg name="execution_enabled" default="false"/>
   <arg name="joint_control_execution_authorized" default="false"/>
+  <arg name="cartesian_jog_execution_authorized" default="false"/>
+  <arg name="cartesian_jog_link7_speed_mps" default="0.01"/>
+  <arg name="cartesian_jog_angular_speed_rad_s" default="0.0872664626"/>
+  <arg name="cartesian_jog_max_translation_m" default="0.01"/>
+  <arg name="cartesian_jog_max_rotation_rad" default="0.0872664626"/>
+  <arg name="cartesian_jog_heartbeat_timeout_s" default="0.35"/>
   <arg name="touch_z_force_authorized" default="false"/>
   <arg name="tool5_drill_authorized" default="false"/>
   <arg name="supervised_commissioning_authorized" default="false"/>
   <!-- JointControlServer streams a time-parameterized trajectory at 50 Hz,
        so use the vendor driver's high-follow pass-through mode only for that
        mutually-exclusive execution path.  Legacy/QR mode keeps low follow. -->
-  <arg name="driver_follow" default="$(arg joint_control_execution_authorized)"/>
+  <arg name="driver_follow"
+       default="$(eval arg('joint_control_execution_authorized') or arg('cartesian_jog_execution_authorized'))"/>
   <arg name="arm_ip" default="192.168.1.18"/>
   <arg name="arm_port" default="8080"/>
-  <arg name="udp_ip" default="192.168.1.100"/>
+  <arg name="udp_ip" default="192.168.5.100"/>
   <arg name="udp_port" default="8089"/>
   <arg name="task_config" default="$(find rm75_autonomous_grasp)/config/task.yaml"/>
   <!-- Only the QR/legacy composition exposes follow_joint_trajectory.
        Joint, Z-force and Tool5 paths use their dedicated mutually-exclusive
        command source while retaining MoveIt's planning/collision services. -->
   <arg name="moveit_execution_enabled"
-       default="$(eval not (arg('joint_control_execution_authorized') or arg('touch_z_force_authorized') or arg('tool5_drill_authorized')))"/>
+       default="$(eval not (arg('joint_control_execution_authorized') or arg('cartesian_jog_execution_authorized') or arg('touch_z_force_authorized') or arg('tool5_drill_authorized')))"/>
 
   <param name="/use_sim_time" value="false"/>
   <include file="$(find rm_75_moveit_config)/launch/planning_context.launch">
@@ -64,10 +71,11 @@
     <arg name="link7_type" value="Link7_6fb"/>
   </include>
   <group unless="$(arg joint_control_execution_authorized)">
-    <group unless="$(arg touch_z_force_authorized)">
-      <group unless="$(arg tool5_drill_authorized)">
-        <node name="trajectory_bridge" pkg="rm75_autonomous_grasp"
-              type="trajectory_bridge" output="screen">
+    <group unless="$(arg cartesian_jog_execution_authorized)">
+      <group unless="$(arg touch_z_force_authorized)">
+        <group unless="$(arg tool5_drill_authorized)">
+          <node name="trajectory_bridge" pkg="rm75_autonomous_grasp"
+                type="trajectory_bridge" output="screen">
         <rosparam command="load" file="$(arg task_config)"/>
         <param name="execute" value="$(arg execution_enabled)"/>
         <!-- The single-marker task has independently verified hand-eye and
@@ -77,7 +85,8 @@
         <param name="tool_verified" value="true"/>
         <param name="stop_verified" value="true"/>
         <param name="require_gripper_feedback" value="false"/>
-        </node>
+          </node>
+        </group>
       </group>
     </group>
   </group>
@@ -85,5 +94,17 @@
     <node name="joint_control_server" pkg="rm75_sampling_gui"
           type="joint_control_server.py" output="screen"
           args="--authorized $(arg supervised_commissioning_authorized) --config $(find rm75_sampling_gui)/config/gui.yaml"/>
+  </group>
+  <group if="$(arg cartesian_jog_execution_authorized)">
+    <node name="rm75_cartesian_jog" pkg="rm75_motion_planning"
+          type="rm75_cartesian_jog_server" output="screen">
+      <rosparam command="load" file="$(find rm75_motion_planning)/config/runtime_guard.yaml"/>
+      <param name="authorized" value="$(arg supervised_commissioning_authorized)"/>
+      <param name="link7_speed_mps" value="$(arg cartesian_jog_link7_speed_mps)"/>
+      <param name="angular_speed_rad_s" value="$(arg cartesian_jog_angular_speed_rad_s)"/>
+      <param name="max_translation_m" value="$(arg cartesian_jog_max_translation_m)"/>
+      <param name="max_rotation_rad" value="$(arg cartesian_jog_max_rotation_rad)"/>
+      <param name="heartbeat_timeout_sec" value="$(arg cartesian_jog_heartbeat_timeout_s)"/>
+    </node>
   </group>
 </launch>

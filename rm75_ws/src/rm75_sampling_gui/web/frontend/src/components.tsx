@@ -98,9 +98,9 @@ export function RobotTwin({descriptor, actual, target, actualFresh}: {
   </div>
 }
 
-export function JointPanel({state, model, target, onTarget, onExecute, onCancel}: {
+export function JointPanel({state, model, target, controlsReady, onTarget, onExecute, onCancel}: {
   state:StationState; model:RobotDescriptor; target:number[]; onTarget:(v:number[])=>void;
-  onExecute:()=>void; onCancel:()=>void
+  controlsReady:boolean; onExecute:()=>void; onCancel:()=>void
 }) {
   const actual = Array.from({length:7},(_,i)=>state.joints?.[`joint${i+1}`])
   const sync=()=>actual.every(Number.isFinite)&&onTarget(actual as number[])
@@ -123,7 +123,7 @@ export function JointPanel({state, model, target, onTarget, onExecute, onCancel}
           <button onPointerDown={()=>startHold(i,-1,j)} onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold}>−</button><button onPointerDown={()=>startHold(i,1,j)} onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold}>+</button>
         </div><span className={margin<.08?'warn':''}>{Number.isFinite(margin)?`${(margin*180/Math.PI).toFixed(1)}°`:'—'}<small>{(j.lower*180/Math.PI).toFixed(0)}°…{(j.upper*180/Math.PI).toFixed(0)}°</small></span>
       </div>})}
-    <div className="joint-actions"><button onClick={sync}>同步实际姿态</button><button className="secondary" onClick={onCancel}>取消执行</button><button className="primary" onClick={onExecute}>执行七轴目标</button></div>
+    <div className="joint-actions"><button onClick={sync}>同步实际姿态</button><button className="secondary" disabled={!controlsReady} onClick={onCancel}>取消执行</button><button className="primary" disabled={!controlsReady} onClick={onExecute}>执行七轴目标</button></div>
     <p className="safety-note"><AlertTriangle size={14}/>滑块、输入框和 ± 仅修改离线预览；执行会自动经过既有 URDF 限位、反馈时效、控制源互斥和 MoveIt/FCL 检查。</p>
   </div>
 }

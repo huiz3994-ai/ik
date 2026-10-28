@@ -19,6 +19,7 @@ import rospy
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
 from std_msgs.msg import Bool, Byte, Empty, Float64, String, UInt16
+from std_srvs.srv import Trigger
 from rm_msgs.msg import Plan_State
 
 from rm75_qr_task.srv import TaskCommand, TaskCommandRequest
@@ -74,6 +75,7 @@ class ROSInterface:
             "haptic_force_fresh": False,
             "haptic_command": {"x": 0.0, "y": 0.0, "z": 0.0},
             "tool5_drill_state": "IDLE",
+            "tool5_drill_state_wall_time": 0.0,
             "tool5_drill_actual_depth_m": 0.0,
             "tool_voltage": None,
             "voltage_commanded": None,
@@ -87,6 +89,11 @@ class ROSInterface:
             "driver_plan_ok": None,
             "driver_arm_error": None,
             "driver_system_error": None,
+            "cartesian_jog": {
+                "state": "IDLE", "direction": "", "stop_reason": "",
+                "reference_frame": "base_link", "rotation_frame": "Link7",
+                "end_effector": "Link7", "tcp_calibrated": False,
+            },
         }
         self._publishers: List[Any] = []
         self._subscribers: List[Any] = []
@@ -94,6 +101,7 @@ class ROSInterface:
         self._emergency_pub: Optional[Any] = None
         self._clear_error_pub: Optional[Any] = None
         self._joint_heartbeat_pub: Optional[Any] = None
+        self._cartesian_jog_heartbeat_pub: Optional[Any] = None
         self._tool5_drill_start_pub: Optional[Any] = None
         self._tool5_drill_stop_pub: Optional[Any] = None
         self.monitor = Monitor(config)
@@ -149,6 +157,9 @@ class ROSInterface:
         self._joint_heartbeat_pub = rospy.Publisher(
             "/rm75_sampling_gui/joint_control_heartbeat", Empty, queue_size=1
         )
+        self._cartesian_jog_heartbeat_pub = rospy.Publisher(
+            "/rm75_sampling_gui/cartesian_jog_heartbeat", Empty, queue_size=1
+        )
         self._tool5_drill_start_pub = rospy.Publisher(
             "/rm75_vertical_press/drill_start_depth_m", Float64, queue_size=1
         )
@@ -160,6 +171,7 @@ class ROSInterface:
             self._emergency_pub,
             self._clear_error_pub,
             self._joint_heartbeat_pub,
+            self._cartesian_jog_heartbeat_pub,
             self._tool5_drill_start_pub,
             self._tool5_drill_stop_pub,
         ]
@@ -265,8 +277,7 @@ class ROSInterface:
             rospy.Subscriber(
                 "/rm75_vertical_press/drill_state",
                 String,
-                lambda message: self._set_telemetry(
-                    "tool5_drill_state", message.data),
+                self._tool5_drill_state_callback,
                 queue_size=1,
             ),
             rospy.Subscriber(
@@ -308,6 +319,11 @@ class ROSInterface:
             ),
             rospy.Subscriber(
                 "/joint_states", JointState, self._joint_callback, queue_size=1
+            ),
+            rospy.Subscriber(
+                "/rm75_cartesian_jog/status", String,
+                lambda message: self._json_callback("cartesian_jog", message),
+                queue_size=1,
             ),
             rospy.Subscriber(
                 "/rm_driver/Plan_State", Plan_State,
@@ -366,6 +382,12 @@ class ROSInterface:
     def _set_telemetry(self, key: str, value: Any) -> None:
         with self._lock:
             self._telemetry[key] = value
+
+    def _tool5_drill_state_callback(self, message: String) -> None:
+        with self._ack_condition:
+            self._telemetry["tool5_drill_state"] = str(message.data)
+            self._telemetry["tool5_drill_state_wall_time"] = time.monotonic()
+            self._ack_condition.notify_all()
 
     def _force_callback(self, key: str, message: Float64) -> None:
         if not math.isfinite(float(message.data)):
@@ -475,6 +497,41 @@ class ROSInterface:
         if self.connected and publisher is not None:
             publisher.publish(Empty())
 
+    def publish_cartesian_jog_heartbeat(self) -> None:
+        """Lease-derived liveness for the dedicated Cartesian executor."""
+
+        publisher = self._cartesian_jog_heartbeat_pub
+        if self.connected and publisher is not None:
+            publisher.publish(Empty())
+
+    def start_cartesian_jog(self, direction: str) -> Dict[str, Any]:
+        allowed = {
+            "x_plus", "x_minus", "y_plus", "y_minus", "z_plus", "z_minus",
+            "rx_plus", "rx_minus", "ry_plus", "ry_minus", "rz_plus", "rz_minus",
+        }
+        if direction not in allowed:
+            raise ROSInterfaceError("不支持的笛卡尔点动方向")
+        service = "/rm75_cartesian_jog/start/{}".format(direction)
+        try:
+            rospy.wait_for_service(service, timeout=self.service_timeout)
+            response = rospy.ServiceProxy(service, Trigger)()
+        except Exception as error:
+            raise ROSInterfaceError("笛卡尔点动执行器不可用：{}".format(error)) from error
+        if not response.success:
+            raise ROSInterfaceError(response.message or "笛卡尔点动被安全检查拒绝")
+        return {"ok": True, "direction": direction, "message": response.message}
+
+    def stop_cartesian_jog(self) -> Dict[str, Any]:
+        service = "/rm75_cartesian_jog/stop"
+        try:
+            rospy.wait_for_service(service, timeout=self.service_timeout)
+            response = rospy.ServiceProxy(service, Trigger)()
+        except Exception as error:
+            raise ROSInterfaceError("笛卡尔停止执行器不可用：{}".format(error)) from error
+        if not response.success:
+            raise ROSInterfaceError(response.message or "笛卡尔停止未确认")
+        return {"ok": True, "stopped": True, "message": response.message}
+
     def start_tool5_drill(self, depth_m: float) -> None:
         value = float(depth_m)
         if not math.isfinite(value) or value <= 0.0:
@@ -482,7 +539,30 @@ class ROSInterface:
         publisher = self._tool5_drill_start_pub
         if not self.connected or publisher is None:
             raise ROSInterfaceError("Tool5钻进命令接口尚未连接")
-        publisher.publish(Float64(data=value))
+        deadline = time.monotonic() + self.ack_timeout
+        while publisher.get_num_connections() == 0:
+            if rospy.is_shutdown() or time.monotonic() >= deadline:
+                raise ROSInterfaceError("Tool5钻进命令topic无订阅者")
+            time.sleep(0.05)
+        with self._ack_condition:
+            sent_at = time.monotonic()
+            publisher.publish(Float64(data=value))
+            while True:
+                state = str(self._telemetry["tool5_drill_state"])
+                state_time = float(
+                    self._telemetry["tool5_drill_state_wall_time"])
+                if state_time >= sent_at:
+                    if state == "DRILLING":
+                        return
+                    if state == "SAFE_STOP":
+                        reason = str(self._telemetry.get("stop_reason") or
+                                     "底层Tool5控制器拒绝Z进给")
+                        raise ROSInterfaceError(reason)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise ROSInterfaceError(
+                        "Tool5 Z进给未确认进入DRILLING，拒绝启动电机")
+                self._ack_condition.wait(remaining)
 
     def stop_tool5_drill_feed(self) -> None:
         publisher = self._tool5_drill_stop_pub
@@ -632,6 +712,17 @@ class ROSInterface:
                 return
             time.sleep(0.05)
         raise ROSInterfaceError("等待力传感器反馈超时")
+
+    def wait_for_tool5_drill_command_ready(self, timeout: float) -> None:
+        publisher = self._tool5_drill_start_pub
+        deadline = time.monotonic() + float(timeout)
+        while not rospy.is_shutdown() and time.monotonic() < deadline:
+            if (publisher is not None and publisher.get_num_connections() > 0 and
+                    "/rm75_vertical_press" in rosnode.get_node_names()):
+                return
+            time.sleep(0.05)
+        raise ROSInterfaceError(
+            "Tool5钻进控制器未建立命令订阅；节点可能已启动失败")
 
     def telemetry_snapshot(self) -> Dict[str, Any]:
         now = time.monotonic()

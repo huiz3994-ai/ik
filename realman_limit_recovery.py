@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 import time
@@ -156,8 +157,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="诊断并安全恢复睿尔曼机械臂 0x1016（关节处于软限位附近）错误。默认只读。"
     )
-    parser.add_argument("--host", default="192.168.1.18", help="机械臂 IP（默认：192.168.1.18）")
-    parser.add_argument("--port", type=int, default=8080, help="JSON/TCP 端口（默认：8080）")
+    default_host = os.environ.get("RM75_ARM_IP", "192.168.1.18")
+    default_port = int(os.environ.get("RM75_ARM_PORT", "8080"))
+    parser.add_argument("--host", default=default_host,
+                        help=f"机械臂 IP（默认：{default_host}，可由 RM75_ARM_IP 配置）")
+    parser.add_argument("--port", type=int, default=default_port,
+                        help=f"JSON/TCP 端口（默认：{default_port}，可由 RM75_ARM_PORT 配置）")
     parser.add_argument("--timeout", type=float, default=3.0, help="查询超时秒数（默认：3）")
     parser.add_argument("--trigger-margin", type=float, default=5.0, help="距软限位多少度内视为需恢复（默认：5）")
     parser.add_argument("--safe-margin", type=float, default=10.0, help="恢复后距软限位的目标裕量，必须大于触发裕量（默认：10）")

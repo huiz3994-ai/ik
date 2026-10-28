@@ -109,6 +109,7 @@ SUPERVISED_COMMISSIONING_AUTHORIZED=true
 - 电压：发布 `/rm_driver/SetToolVoltage`，等待本次命令之后的 `/rm_driver/Set_Tool_Voltage_Result`。协议为 24V→3、0V→0。
 - 力控显示：订阅 `/rm75_vertical_press/{force_z,filtered_force_z,force_setpoint,active,control_mode,stop_reason}`。GUI 不绕过 Touch 的按键使能逻辑。
 - 安全：软件急停发布 `/rm_driver/Emergency_Stop` 并等待新的 `/rm_driver/Set_Arm_Stop_Result`；恢复发布 `/rm_driver/Clear_System_Err` 并等待新的 `/rm_driver/System_En_State_Result`，然后调用 QR 任务恢复接口。恢复不会生成限位脱困运动。
+- Web“末端位置控制”提供 `base_link` 平移和 `Link7` 局部旋转的按住点动；末端参考不是已标定工具 TCP。接口、安全限制和停止确认见 `docs/web/CARTESIAN_JOG.md`。
 
 各功能不再受固定任务状态链约束。按钮根据真实ROS节点、HMI拥有的控制进程、工具选择和执行授权独立启用；操作状态只用于显示和日志。底层控制异常仍会停止GUI管理的控制launch并锁存`SAFE_STOP`，恢复检查仍不产生运动。
 

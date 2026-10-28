@@ -72,11 +72,20 @@ export interface StationState {
     }
   }
   tool5_drill?: {
-    state: 'IDLE'|'STARTING'|'DRILLING'|'DEPTH_REACHED'|'STOPPING_MOTOR'|'COMPLETED'|'SAFE_STOP'
+    state: 'IDLE'|'STARTING'|'ROTATING'|'DRILLING'|'DEPTH_REACHED'|'STOPPING_MOTOR'|'COMPLETED'|'SAFE_STOP'
     target_depth_m: number; actual_depth_m: number
     axial_force_n?: number|null; torque_norm_nm?: number|null
     motor_running: boolean; feed_state: string; fault_reason: string
+    force_feedback_required?: boolean; feed_control?: string
     tcp_reference: string; tcp_calibrated: boolean; motor_watchdog_timeout_s: number
+  }
+  cartesian_jog?: {
+    state: 'IDLE'|'JOGGING'|'STOPPING'|'STOPPED'|'LIMIT_REACHED'|'SAFE_STOP'
+    direction: string; stop_reason: string; progress: number
+    reference_frame: 'base_link'; rotation_frame: 'Link7'
+    end_effector: 'Link7'; tcp_calibrated: false
+    actual_pose: Record<string,number>; target_pose: Record<string,number>
+    limits: {translation_m:number;rotation_rad:number;linear_speed_mps:number;angular_speed_rad_s:number}
   }
   configured_pick_status?: {
     status?: string; step?: number; step_name?: string; slot_id?: number|null

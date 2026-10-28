@@ -26,6 +26,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8088)
     for option in ("execution-enabled", "qr-execution-authorized",
                    "joint-control-execution-authorized",
+                   "cartesian-jog-execution-authorized",
                    "touch-z-force-authorized",
                    "tool5-drill-authorized",
                    "trajectory-execution-authorized",
@@ -43,7 +44,8 @@ def main() -> int:
         raise SystemExit("默认Web平台无身份认证，仅允许绑定127.0.0.1")
     enabled = {name: getattr(args, name) == "true" for name in (
         "execution_enabled", "qr_execution_authorized",
-        "joint_control_execution_authorized", "trajectory_execution_authorized",
+        "joint_control_execution_authorized", "cartesian_jog_execution_authorized",
+        "trajectory_execution_authorized",
         "touch_z_force_authorized",
         "tool5_drill_authorized",
         "supervised_commissioning_authorized", "sampling_hardware_authorized")}
@@ -55,6 +57,7 @@ def main() -> int:
         raise SystemExit("OFFLINE/SIMULATION不能与真实执行授权同时使用")
     command_paths = sum(bool(enabled[key]) for key in (
         "joint_control_execution_authorized",
+        "cartesian_jog_execution_authorized",
         "trajectory_execution_authorized",
         "touch_z_force_authorized",
         "tool5_drill_authorized",
@@ -65,6 +68,7 @@ def main() -> int:
         "execution_enabled": enabled["execution_enabled"],
         "qr_execution_authorized": enabled["qr_execution_authorized"],
         "joint_control_execution_authorized": enabled["joint_control_execution_authorized"],
+        "cartesian_jog_execution_authorized": enabled["cartesian_jog_execution_authorized"],
         "touch_z_force_authorized": enabled["touch_z_force_authorized"],
         "tool5_drill_authorized": enabled["tool5_drill_authorized"],
         "trajectory_execution_authorized": enabled["trajectory_execution_authorized"],

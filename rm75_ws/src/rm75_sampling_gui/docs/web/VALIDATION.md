@@ -1,4 +1,29 @@
-# Web 重构验证记录（更新至 2026-10-20）
+# Web 重构验证记录（更新至 2026-10-28）
+
+## 2026-10-28 Link7 笛卡尔点动（仅仿真/自动化）
+
+- `catkin build rm75_motion_planning rm75_sampling_gui --no-status -j2`：连同依赖共 17 个包
+  Release 构建成功，0 warning、0 failed。新增 `rm75_cartesian_jog_server` 已实际编译、链接。
+- 受影响包 `catkin run_tests` 全部通过：`rm75_motion_planning` 66、
+  `rm75_sampling_gui` 88、`rm75_touch_teleop` 57、`rm75_vertical_press` 12、
+  `rm75_qr_task` 30；共 253 项，0 errors、0 failures、0 skipped。末端方向专项 C++
+  测试覆盖 6 个基坐标平移和 6 个 Link7 局部旋转。
+- 容器 Web venv 中 `pytest -q test/test_web_backend.py`：50 passed。覆盖固定方向白名单、
+  独占租约、无租约/SAFE_STOP 拒绝、12 个仿真方向、10 mm/5° 上限、租约丢失停止，以及
+  SIMULATION 不调用 ROS 运动输出；另验证执行器退出只补发一次 ACK-checked 驱动停止，停止
+  失败仍保持 SAFE_STOP。IK 失败、关节限位、跟踪误差、下一周期预测和碰撞拒绝由
+  `rm75_motion_planning` 的 ContinuousIk/Validator/RuntimeGuard/Collision 测试覆盖。
+- `validate_web_simulation.py --url http://127.0.0.1:8093`：PASS。真实 HTTP/WebSocket
+  黑盒依次开始/停止十二个方向，并验证 WebSocket 直接断开后租约看门狗冻结内存植物且记录
+  `lease expired`；同时回归七轴、Z 力位/Touch 触觉、采样硬件、SAFE_STOP、二维码、五工具和
+  相机 JPEG。仿真启动参数保持所有真实执行授权为 false。
+- 前端 `npm run build`：TypeScript 和 Vite 生产构建成功（2780 modules transformed）。使用
+  768px 可视浏览器检查侧栏入口、两个圆形交叉控制盘、弧形旋转图标、Link7 实际/目标位姿、
+  状态和停止原因；取得仿真控制租约后点击 X+，页面返回 STOPPED 且目标 X 增加 10 mm。
+- 仿真初版在状态刷新中重复运行 SciPy IK，曾使 650 ms 浏览器租约心跳饥饿。已改为 START
+  前对最大目标求解一次 IK，运行中只插值该已验证关节解；修复后十二方向与断联黑盒通过。
+- 本轮没有连接控制器、没有启动真实驱动、没有发布 `/rm_driver/JointPos`，也没有执行工具
+  电源、电机或 commissioning。本节结果不构成真机方向、停止距离或碰撞场景验收。
 
 ## 2026-10-25 七轴实机冒烟测试
 

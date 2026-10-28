@@ -49,6 +49,26 @@ async def validate(base_url: str) -> None:
             heartbeat_task = asyncio.create_task(heartbeat())
             drain_task = asyncio.create_task(drain())
 
+            # Exercise the same hold/release endpoints used by pointer, touch
+            # and keyboard interaction while the plant is at its commissioned
+            # non-singular simulation posture.
+            for direction in (
+                    "x_plus", "x_minus", "y_plus", "y_minus", "z_plus", "z_minus",
+                    "rx_plus", "rx_minus", "ry_plus", "ry_minus", "rz_plus", "rz_minus"):
+                started = await client.post("/api/v1/cartesian/jog/start",
+                    json={"direction": direction}, headers=headers)
+                if not started.is_success:
+                    raise RuntimeError("{}点动启动失败：{} {}".format(
+                        direction, started.status_code, started.text))
+                jog = started.json().get("status", {})
+                if jog.get("state") != "JOGGING" or jog.get("direction") != direction:
+                    raise RuntimeError("{}点动未进入JOGGING".format(direction))
+                stopped = await client.post("/api/v1/cartesian/jog/stop",
+                                             headers=headers)
+                stopped.raise_for_status()
+                if not stopped.json().get("stopped"):
+                    raise RuntimeError("{}松开后未确认停止".format(direction))
+
             target = [0.25, -0.18, 0.12, -0.10, 0.08, 0.06, -0.04]
             response = await client.post("/api/v1/joints/execute",
                                          json={"target": target}, headers=headers)
@@ -120,6 +140,10 @@ async def validate(base_url: str) -> None:
                                                json={"target": [0.0] * 7}, headers=headers)
             if blocked_joint.status_code != 409:
                 raise RuntimeError("SAFE_STOP下的七轴目标未被拒绝")
+            blocked_jog = await client.post("/api/v1/cartesian/jog/start",
+                json={"direction": "x_plus"}, headers=headers)
+            if blocked_jog.status_code != 409:
+                raise RuntimeError("SAFE_STOP下的末端点动未被拒绝")
             blocked_voltage = await client.post("/api/v1/commands/set_voltage",
                 json={"payload": {"voltage": 24}}, headers=headers)
             if blocked_voltage.status_code != 409:
@@ -150,13 +174,13 @@ async def validate(base_url: str) -> None:
             if (not qr.get("targets_valid") or qr.get("holding_slot") != 2 or
                     qr.get("grasp_confirmed") is not False or len(targets) != 5):
                 raise RuntimeError("二维码仿真取物状态或五目标数据不完整")
-            if state.get("operator_state") != "TOOL_HOLD" or state.get(
+            if state.get("operator_state") != "IDLE" or state.get(
                     "tool_voltage") != 24:
-                raise RuntimeError("二维码仿真取物未进入持有/24V状态")
+                raise RuntimeError("二维码仿真取物后未恢复可操作/24V状态")
             (await client.post("/api/v1/commands/cancel_tool",
                 json={"payload": {}}, headers=headers)).raise_for_status()
             state = (await client.get("/api/v1/state")).json()
-            if (state.get("operator_state") != "TOOL_HOLD" or
+            if (state.get("operator_state") != "IDLE" or
                     state.get("five_target_status", {}).get("holding_slot") != 2):
                 raise RuntimeError("取消运动时错误地清除了实际持有状态")
             (await client.post("/api/v1/commands/return_tool",
@@ -192,7 +216,25 @@ async def validate(base_url: str) -> None:
             frame.raise_for_status()
             if not frame.content.startswith(b"\xff\xd8") or len(frame.content) < 1000:
                 raise RuntimeError("仿真相机没有返回有效JPEG")
-            print("PASS: simulation health, lease heartbeat, joint tracking, Z-only "
+
+            # A vanished browser must stop an active jog even when no pointer-up
+            # request can be delivered.  Closing the socket invalidates the lease;
+            # the simulator's watchdog must then stop and hold the feedback pose.
+            (await client.post("/api/v1/cartesian/jog/start",
+                json={"direction": "x_plus"}, headers=headers)).raise_for_status()
+            for task in (heartbeat_task, drain_task):
+                if task is not None:
+                    task.cancel()
+            await websocket.close()
+            await asyncio.sleep(0.8)
+            disconnected = (await client.get("/api/v1/state")).json()
+            disconnected_jog = disconnected.get("cartesian_jog", {})
+            if disconnected_jog.get("state") not in ("STOPPED", "IDLE"):
+                raise RuntimeError("WebSocket断联后末端点动未停止")
+            if "lease" not in disconnected_jog.get("stop_reason", "").lower():
+                raise RuntimeError("WebSocket断联停止原因未记录控制租约失效")
+            print("PASS: simulation health, lease heartbeat, joint tracking, twelve "
+                  "Cartesian hold/release directions, WebSocket-disconnect stop, Z-only "
                   "force/position mode, bounded Touch-Y haptics, voltage, sampling "
                   "hardware, SAFE_STOP rejection/recovery, full QR detect/compute/"
                   "preview/plan/execute/cancel/return flow with order guards, "

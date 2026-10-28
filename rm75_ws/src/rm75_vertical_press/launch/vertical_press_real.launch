@@ -22,6 +22,7 @@
   <arg name="direct_press_speed" default="0.050"/>
   <arg name="max_joint_velocity" default="1.20"/>
   <arg name="tool5_drill_enabled" default="false"/>
+  <arg name="tool5_require_force_feedback" default="false"/>
   <arg name="tool5_drill_max_feed_travel" default="0.05"/>
   <arg name="desired_force" default="-50.0"/>
   <arg name="max_z_velocity" default="0.005"/>
@@ -74,6 +75,7 @@
     <param name="direct_press_speed" value="$(arg direct_press_speed)"/>
     <param name="max_joint_velocity" value="$(arg max_joint_velocity)"/>
     <param name="tool5_drill_enabled" value="$(arg tool5_drill_enabled)"/>
+    <param name="tool5_require_force_feedback" value="$(arg tool5_require_force_feedback)"/>
     <param name="tool5_drill_max_feed_travel" value="$(arg tool5_drill_max_feed_travel)"/>
     <param name="desired_force" value="$(arg desired_force)"/>
     <param name="max_z_velocity" value="$(arg max_z_velocity)"/>

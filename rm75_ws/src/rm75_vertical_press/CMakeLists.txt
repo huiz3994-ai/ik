@@ -37,6 +37,10 @@ if(CATKIN_ENABLE_TESTING)
   if(TARGET vertical_orientation_test)
     target_link_libraries(vertical_orientation_test ${catkin_LIBRARIES})
   endif()
+  catkin_add_gtest(tool5_feed_test test/tool5_feed_test.cpp)
+  if(TARGET tool5_feed_test)
+    target_link_libraries(tool5_feed_test ${catkin_LIBRARIES})
+  endif()
 endif()
 
 install(TARGETS rm75_vertical_press_node rm75_vertical_ik_probe
